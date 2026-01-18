@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tortillería El Maizal | Gastos</title>
+
+  <link rel="icon" type="image/png" href="imagenes/logo1.png" />
+  <link rel="stylesheet" href="gastos.css" />
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <img src="imagenes/logo1.png" alt="Logo El Maizal">
+        <div class="title">
+          <strong>El Maizal</strong>
+          <span>Gastos</span>
+        </div>
+      </div>
+
+      <div class="userbox">
+        <div class="email" id="userEmail">Cargando...</div>
+        <button class="btn-logout" id="btnLogout">Cerrar sesión</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" id="app" style="display:none;">
+    <section class="actions-top">
+      <button class="btn-back" id="btnBack">⬅ Volver al Panel</button>
+      <button class="btn-go2" id="btnGoVentas">💰 Ventas</button>
+    </section>
+
+    <section class="card">
+      <h1>Registrar gasto</h1>
+
+      <form id="formGasto" class="form">
+        <div class="field">
+          <label>Sucursal</label>
+          <select id="sucursal" required>
+            <option value="">Selecciona</option>
+            <option value="1">Sucursal 1</option>
+            <option value="2">Sucursal 2</option>
+            <option value="3">Sucursal 3</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Categoría</label>
+          <select id="categoria" required>
+            <option value="">Selecciona</option>
+            <option value="Gasolina">Gasolina</option>
+            <option value="Masa">Masa</option>
+            <option value="Gas">Gas</option>
+            <option value="Luz">Luz</option>
+            <option value="Agua">Agua</option>
+            <option value="Renta">Renta</option>
+            <option value="Mantenimiento">Mantenimiento</option>
+            <option value="Bolsas">Bolsas</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Descripción</label>
+          <input type="text" id="descripcion" placeholder="Ej. Gasolina repartidor / Compra de masa" required />
+        </div>
+
+        <div class="field">
+          <label>Monto ($)</label>
+          <input type="number" id="monto" step="0.1" min="0" placeholder="Ej. 250" required />
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn-primary" id="btnGuardar">Guardar gasto</button>
+        </div>
+
+        <p class="msg" id="msg"></p>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Registros en tiempo real</h2>
+
+      <div class="filters">
+        <select id="filtroSucursal">
+          <option value="todas">Todas las sucursales</option>
+          <option value="1">Sucursal 1</option>
+          <option value="2">Sucursal 2</option>
+          <option value="3">Sucursal 3</option>
+        </select>
+
+        <select id="filtroCategoria">
+          <option value="todas">Todas las categorías</option>
+          <option value="Gasolina">Gasolina</option>
+          <option value="Masa">Masa</option>
+          <option value="Gas">Gas</option>
+          <option value="Luz">Luz</option>
+          <option value="Agua">Agua</option>
+          <option value="Renta">Renta</option>
+          <option value="Mantenimiento">Mantenimiento</option>
+          <option value="Bolsas">Bolsas</option>
+          <option value="Otro">Otro</option>
+        </select>
+
+        <input type="date" id="filtroFecha" />
+        <button class="btn-clear" id="btnClearFecha">Quitar fecha</button>
+      </div>
+
+      <div class="reset-box">
+        <input type="date" id="fechaInicio">
+        <input type="date" id="fechaFin">
+        <button class="btn-danger" id="btnResetRango">Eliminar registros por fecha</button>
+      </div>
+
+      <div class="resumen">
+        <div class="res-card neto">
+          <span>Total gastos</span>
+          <strong id="resGastos">$0.00</strong>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Sucursal</th>
+              <th>Categoría</th>
+              <th>Descripción</th>
+              <th>Monto</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyGastos"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div class="loading" id="loading">Verificando sesión...</div>
+
+  <div class="modal-backdrop" id="modalBackdrop" style="display:none;">
+    <div class="modal">
+      <h3>Eliminar gasto</h3>
+      <p>¿Seguro que deseas eliminar este registro?</p>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btnModalCancelar">Cancelar</button>
+        <button class="btn-danger" id="btnModalEliminar">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+
+  <script src="gastos.js"></script>
+</body>
+</html>

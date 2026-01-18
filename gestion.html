@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tortillería El Maizal | Gestión</title>
+
+  <link rel="icon" type="image/png" href="imagenes/logo1.png" />
+  <link rel="stylesheet" href="gestion.css" />
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <img src="imagenes/logo1.png" alt="Logo El Maizal">
+        <div class="title">
+          <strong>El Maizal</strong>
+          <span>Gestión</span>
+        </div>
+      </div>
+
+      <div class="userbox">
+        <div class="email" id="userEmail">Cargando...</div>
+        <button class="btn-logout" id="btnLogout">Cerrar sesión</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" id="app" style="display:none;">
+    <section class="actions-top">
+      <button class="btn-back" id="btnBack">⬅ Volver al Panel</button>
+    </section>
+
+    <section class="card">
+      <div class="head-row">
+        <div>
+          <h1>Sucursales</h1>
+          <p class="sub">Cambia el nombre de las sucursales y se reflejará en todo el sistema.</p>
+        </div>
+
+        <button class="btn-primary" id="btnCrearDefault">Crear sucursales 1, 2, 3</button>
+      </div>
+
+      <p class="msg" id="msg"></p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nombre</th>
+              <th>Estado</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="tbodySucursales"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div class="loading" id="loading">Verificando sesión...</div>
+
+  <div class="modal-backdrop" id="modalBackdrop" style="display:none;">
+    <div class="modal">
+      <h3>Editar sucursal</h3>
+
+      <div class="field">
+        <label>Nombre</label>
+        <input type="text" id="editNombre" placeholder="Ej. Centro / Norte / Patria" />
+      </div>
+
+      <div class="field">
+        <label>Estado</label>
+        <select id="editActiva">
+          <option value="true">Activa</option>
+          <option value="false">Inactiva</option>
+        </select>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btnModalCancelar">Cancelar</button>
+        <button class="btn-primary" id="btnModalGuardar">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+
+  <script src="gestion.js"></script>
+</body>
+</html>

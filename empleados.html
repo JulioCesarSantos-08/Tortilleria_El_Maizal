@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tortillería El Maizal | Empleados</title>
+
+  <link rel="icon" type="image/png" href="imagenes/logo1.png" />
+  <link rel="stylesheet" href="empleados.css" />
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <img src="imagenes/logo1.png" alt="Logo El Maizal">
+        <div class="title">
+          <strong>El Maizal</strong>
+          <span>Empleados</span>
+        </div>
+      </div>
+
+      <div class="userbox">
+        <div class="email" id="userEmail">Cargando...</div>
+        <button class="btn-logout" id="btnLogout">Cerrar sesión</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" id="app" style="display:none;">
+    <section class="actions-top">
+      <button class="btn-back" id="btnBack">⬅ Volver al Panel</button>
+    </section>
+
+    <section class="card">
+      <h1>Registrar empleado</h1>
+
+      <form id="formEmpleado" class="form">
+        <div class="field">
+          <label>Nombre</label>
+          <input type="text" id="nombre" placeholder="Ej. Juan Pérez" required />
+        </div>
+
+        <div class="field">
+          <label>Sucursal</label>
+          <select id="sucursal" required>
+            <option value="">Selecciona</option>
+            <option value="1">Sucursal 1</option>
+            <option value="2">Sucursal 2</option>
+            <option value="3">Sucursal 3</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Rol</label>
+          <select id="rol" required>
+            <option value="">Selecciona</option>
+            <option value="Empleado">Empleado</option>
+            <option value="Repartidor">Repartidor</option>
+            <option value="Encargado">Encargado</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn-primary" id="btnGuardar">Guardar</button>
+          <button type="button" class="btn-secondary" id="btnCancelar" style="display:none;">Cancelar edición</button>
+          <button type="button" class="btn-danger" id="btnBorrarTodos">Eliminar todos</button>
+        </div>
+
+
+        <p class="msg" id="msg"></p>
+      </form>
+    </section>
+
+    <section class="grid">
+      <div class="table-card">
+        <h2>Sucursal 1</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Rol</th>
+                <th class="th-actions">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody1"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <h2>Sucursal 2</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Rol</th>
+                <th class="th-actions">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody2"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <h2>Sucursal 3</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Rol</th>
+                <th class="th-actions">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody3"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="loading" id="loading">
+    Verificando sesión...
+  </div>
+
+  <div class="modal-backdrop" id="modalBackdrop" style="display:none;">
+    <div class="modal">
+      <h3>Eliminar empleado</h3>
+      <p>¿Seguro que deseas eliminar este empleado?</p>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btnModalCancelar">Cancelar</button>
+        <button class="btn-danger" id="btnModalEliminar">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+
+  <script src="empleados.js"></script>
+</body>
+</html>

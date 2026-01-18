@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tortillería El Maizal | Ventas</title>
+
+  <link rel="icon" type="image/png" href="imagenes/logo1.png" />
+  <link rel="stylesheet" href="empleados2.css" />
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <img src="imagenes/logo1.png" alt="Logo El Maizal">
+        <div class="title">
+          <strong>El Maizal</strong>
+          <span>Ventas</span>
+        </div>
+      </div>
+
+      <div class="userbox">
+        <div class="email" id="userEmail">Cargando...</div>
+        <button class="btn-logout" id="btnLogout">Cerrar sesión</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" id="app" style="display:none;">
+    <section class="actions-top">
+      <button class="btn-back" id="btnBack">⬅ Volver al Panel</button>
+      <button class="btn-go2" id="btnGoGastos">🧾 Ir a Gastos</button>
+    </section>
+
+    <section class="card">
+      <h1>Registrar venta</h1>
+
+      <form id="formVenta" class="form">
+        <div class="field">
+          <label>Sucursal</label>
+          <select id="sucursal" required>
+            <option value="">Selecciona</option>
+            <option value="1">Sucursal 1</option>
+            <option value="2">Sucursal 2</option>
+            <option value="3">Sucursal 3</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Tipo de venta</label>
+          <select id="tipoVenta" required>
+            <option value="">Selecciona</option>
+            <option value="repartidor">Repartidor</option>
+            <option value="local">Local (Mostrador)</option>
+          </select>
+        </div>
+
+        <div class="field" id="fieldEmpleado" style="display:none;">
+          <label>Empleado</label>
+          <select id="empleado">
+            <option value="">Selecciona empleado</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Kilos vendidos</label>
+          <input type="number" id="kilos" step="0.1" min="0" placeholder="Ej. 80" required />
+        </div>
+
+        <div class="field">
+          <label>Precio por kilo</label>
+          <input type="number" id="precioKilo" step="0.1" min="0" value="25" required />
+        </div>
+
+        <div class="field">
+          <label>Total en pesos</label>
+          <input type="text" id="totalPesos" readonly />
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn-primary" id="btnGuardar">Guardar venta</button>
+        </div>
+
+        <p class="msg" id="msg"></p>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Registros en tiempo real</h2>
+
+      <div class="filters">
+        <select id="filtroSucursal">
+          <option value="todas">Todas las sucursales</option>
+          <option value="1">Sucursal 1</option>
+          <option value="2">Sucursal 2</option>
+          <option value="3">Sucursal 3</option>
+        </select>
+
+        <select id="filtroTipo">
+          <option value="todos">Todos</option>
+          <option value="repartidor">Repartidor</option>
+          <option value="local">Local</option>
+        </select>
+
+        <input type="date" id="filtroFecha">
+        <button class="btn-clear" id="btnClearFecha">Quitar fecha</button>
+      </div>
+
+      <div class="reset-box">
+        <input type="date" id="fechaInicio">
+        <input type="date" id="fechaFin">
+        <button class="btn-danger" id="btnResetRango">Eliminar registros por fecha</button>
+      </div>
+
+      <div class="resumen">
+        <div class="res-card">
+          <span>Total kilos</span>
+          <strong id="resKilos">0.0</strong>
+        </div>
+
+        <div class="res-card">
+          <span>Total ventas</span>
+          <strong id="resVentas">$0.00</strong>
+        </div>
+
+        <div class="res-card">
+          <span>Total gastos</span>
+          <strong id="resGastos">$0.00</strong>
+        </div>
+
+        <div class="res-card neto">
+          <span>Ganancia neta</span>
+          <strong id="resNeto">$0.00</strong>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Sucursal</th>
+              <th>Tipo</th>
+              <th>Empleado</th>
+              <th>Kilos</th>
+              <th>$ / Kilo</th>
+              <th>Total</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyVentas"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div class="loading" id="loading">Verificando sesión...</div>
+
+  <div class="modal-backdrop" id="modalBackdrop" style="display:none;">
+    <div class="modal">
+      <h3>Eliminar venta</h3>
+      <p>¿Seguro que deseas eliminar este registro?</p>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btnModalCancelar">Cancelar</button>
+        <button class="btn-danger" id="btnModalEliminar">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+
+  <script src="empleados2.js"></script>
+</body>
+</html>

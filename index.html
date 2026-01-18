@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tortillería El Maizal | Login</title>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="imagenes/logo1.png" />
+
+  <style>
+    :root{
+      --black:#121212;
+      --white:#ffffff;
+
+      --maiz-yellow:#f2c94c;
+      --maiz-green:#1f8a4c;
+      --maiz-orange:#f2994a;
+
+      --gray-1:#f6f6f6;
+      --gray-2:#e9e9e9;
+      --gray-3:#bdbdbd;
+
+      --shadow: 0 12px 30px rgba(0,0,0,.12);
+      --radius: 18px;
+    }
+
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+
+    body{
+      min-height:100vh;
+      background:
+        radial-gradient(circle at top, rgba(242,201,76,.22), transparent 55%),
+        radial-gradient(circle at bottom, rgba(31,138,76,.18), transparent 55%),
+        linear-gradient(180deg, #ffffff, #fafafa);
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      padding:18px;
+    }
+
+    .container{
+      width:100%;
+      max-width:440px;
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+    }
+
+    .card{
+      background:var(--white);
+      border:1px solid var(--gray-2);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:22px;
+    }
+
+    .logo{
+      width:100%;
+      display:flex;
+      justify-content:center;
+      margin-bottom:12px;
+    }
+
+    .logo img{
+      width:96px;
+      height:96px;
+      object-fit:contain;
+      border-radius:18px;
+    }
+
+    h1{
+      text-align:center;
+      font-size:1.35rem;
+      color:var(--black);
+      font-weight:800;
+    }
+
+    p.sub{
+      margin-top:6px;
+      text-align:center;
+      font-size:.95rem;
+      color:#555;
+      line-height:1.35;
+    }
+
+    form{
+      margin-top:16px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+
+    label{
+      font-size:.92rem;
+      color:#222;
+      font-weight:600;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+
+    input{
+      width:100%;
+      padding:12px 12px;
+      border:1px solid var(--gray-2);
+      border-radius:14px;
+      outline:none;
+      font-size:1rem;
+      background:#fff;
+    }
+
+    input:focus{
+      border-color: rgba(31,138,76,.6);
+      box-shadow: 0 0 0 4px rgba(31,138,76,.12);
+    }
+
+    .btn-primary{
+      width:100%;
+      padding:12px 14px;
+      border:none;
+      border-radius:14px;
+      background: linear-gradient(90deg, var(--maiz-green), var(--maiz-orange));
+      color:var(--white);
+      font-size:1rem;
+      font-weight:800;
+      cursor:pointer;
+      transition: transform .08s ease;
+    }
+
+    .btn-primary:active{
+      transform: scale(.99);
+    }
+
+    .btn-primary:disabled{
+      opacity:.6;
+      cursor:not-allowed;
+    }
+
+    .btn-link{
+      border:none;
+      background:transparent;
+      color:var(--maiz-green);
+      font-weight:700;
+      cursor:pointer;
+      padding:8px 0;
+      font-size:.95rem;
+    }
+
+    .msg{
+      text-align:center;
+      font-size:.92rem;
+      min-height:20px;
+      color:#b00020;
+      font-weight:700;
+    }
+
+    footer{
+      text-align:center;
+      color:#666;
+      font-size:.85rem;
+    }
+  </style>
+</head>
+
+<body>
+  <main class="container">
+    <section class="card">
+      <div class="logo">
+        <img src="imagenes/logo1.png" alt="Logo Tortillería El Maizal">
+      </div>
+
+      <h1>Panel de Administración</h1>
+      <p class="sub">Inicia sesión para gestionar sucursales, empleados, gastos y ganancias.</p>
+
+      <form id="loginForm">
+        <label>
+          Correo
+          <input id="email" type="email" placeholder="correo@ejemplo.com" required>
+        </label>
+
+        <label>
+          Contraseña
+          <input id="password" type="password" placeholder="••••••••" required>
+        </label>
+
+        <button type="submit" class="btn-primary" id="btnLogin">Iniciar sesión</button>
+
+        <button type="button" class="btn-link" id="btnForgot">¿Olvidaste tu contraseña?</button>
+
+        <p class="msg" id="msg"></p>
+      </form>
+    </section>
+
+    <footer>
+      <small>© <span id="year"></span> Tortillería El Maizal</small>
+    </footer>
+  </main>
+
+  <!-- Firebase SDK (Compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+
+    // =========================
+    // 🔥 CONFIGURACIÓN FIREBASE
+    // =========================
+    const firebaseConfig = {
+     apiKey: "AIzaSyCzlWi30F2qXaCg9ddjW5RVVsuI23Xl8vY",
+     authDomain: "tortilleria-el-maizal.firebaseapp.com",
+     databaseURL: "https://tortilleria-el-maizal-default-rtdb.firebaseio.com",
+     projectId: "tortilleria-el-maizal",
+     storageBucket: "tortilleria-el-maizal.firebasestorage.app",
+     messagingSenderId: "704775522415",
+     appId: "1:704775522415:web:96ae90bb0c0d45cbafa59a"
+   };
+
+    firebase.initializeApp(firebaseConfig);
+
+    const auth = firebase.auth();
+
+    // =========================
+    // 🔐 SI YA ESTÁ LOGUEADO -> PANEL
+    // =========================
+    auth.onAuthStateChanged((user) => {
+      if (user) {
+        window.location.href = "panel.html";
+      }
+    });
+
+    // =========================
+    // ✅ LOGIN
+    // =========================
+    const loginForm = document.getElementById("loginForm");
+    const msg = document.getElementById("msg");
+    const btnLogin = document.getElementById("btnLogin");
+    const btnForgot = document.getElementById("btnForgot");
+
+    function setMsg(text = "", isError = true) {
+      msg.style.color = isError ? "#b00020" : "#1f8a4c";
+      msg.textContent = text;
+    }
+
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value.trim();
+
+      setMsg("");
+      btnLogin.disabled = true;
+
+      try {
+        await auth.signInWithEmailAndPassword(email, password);
+        window.location.href = "panel.html";
+      } catch (error) {
+        setMsg("Correo o contraseña incorrectos.");
+      } finally {
+        btnLogin.disabled = false;
+      }
+    });
+
+    // =========================
+    // 🔁 RECUPERAR CONTRASEÑA
+    // =========================
+    btnForgot.addEventListener("click", async () => {
+      const email = document.getElementById("email").value.trim();
+
+      if (!email) {
+        setMsg("Escribe tu correo para enviarte el enlace de recuperación.");
+        return;
+      }
+
+      try {
+        await auth.sendPasswordResetEmail(email);
+        setMsg("Listo. Revisa tu correo para restablecer la contraseña.", false);
+      } catch (error) {
+        setMsg("No se pudo enviar el correo. Verifica el correo escrito.");
+      }
+    });
+  </script>
+</body>
+</html>

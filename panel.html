@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tortillería El Maizal | Panel</title>
+
+  <link rel="icon" type="image/png" href="imagenes/logo1.png" />
+  <link rel="stylesheet" href="panel.css" />
+</head>
+
+<body>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <img src="imagenes/logo1.png" alt="Logo El Maizal">
+        <div class="title">
+          <strong>El Maizal</strong>
+          <span>Panel de administración</span>
+        </div>
+      </div>
+
+      <div class="userbox">
+        <div class="email" id="userEmail">Cargando...</div>
+        <button class="btn-logout" id="btnLogout">Cerrar sesión</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" id="app" style="display:none;">
+    <section class="welcome">
+      <h1>Menú principal</h1>
+      <p>Selecciona una opción para administrar empleados, ventas/gastos, ganancias y más.</p>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <h2>👨‍🍳 Empleados</h2>
+        <p>Da de alta, edita o elimina empleados y asigna sucursal y rol.</p>
+        <button class="btn" id="goEmpleados">Entrar</button>
+      </div>
+
+      <div class="card">
+        <h2>🧾 Administración</h2>
+        <p>Registra ventas y gastos por sucursal y revisa todo en tiempo real.</p>
+        <button class="btn secondary" id="goAdmin">Entrar</button>
+      </div>
+
+      <div class="card">
+        <h2>📊 Ganancias</h2>
+        <p>Reporte final por fechas: ventas, gastos y ganancia neta.</p>
+        <button class="btn" id="goGanancias">Entrar</button>
+      </div>
+
+      <div class="card">
+        <h2>⚙️ Gestión</h2>
+        <p>Otras configuraciones y herramientas del sistema.</p>
+        <button class="btn gray" id="goGestion">Entrar</button>
+      </div>
+    </section>
+  </main>
+
+  <div class="loading" id="loading">
+    Verificando sesión...
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+
+  <script src="panel.js"></script>
+</body>
+</html>
