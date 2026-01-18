@@ -49,6 +49,9 @@ let gastosCache = [];
 let deleteId = null;
 let msgTimer = null;
 
+// Cache de sucursales: { id -> {nombre, activa} }
+let sucursalesMap = new Map();
+
 function setMsg(text = "", isError = true, autoClear = true) {
   msg.style.color = isError ? "#b00020" : "#1f8a4c";
   msg.textContent = text;
@@ -85,6 +88,78 @@ function escapeHtml(text) {
     .replaceAll("'", "&#039;");
 }
 
+// ============================
+// SUCURSALES DINAMICAS
+// ============================
+
+function getSucursalNombreById(id) {
+  if (!id) return "-";
+  const s = sucursalesMap.get(String(id));
+  return s?.nombre || "-";
+}
+
+function fillSucursalSelects() {
+  // Select de registrar gasto
+  sucursalSelect.innerHTML = `<option value="">Selecciona sucursal</option>`;
+
+  // Select de filtro
+  filtroSucursal.innerHTML = `<option value="todas">Todas</option>`;
+
+  // Solo activas para registrar
+  const sucursalesActivas = Array.from(sucursalesMap.entries())
+    .map(([id, data]) => ({ id, ...data }))
+    .filter(s => s.activa === true)
+    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+
+  sucursalesActivas.forEach((s) => {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = s.nombre || "Sin nombre";
+    sucursalSelect.appendChild(opt);
+  });
+
+  // En filtros: mostramos todas (activas e inactivas) para consultar historial
+  const sucursalesTodas = Array.from(sucursalesMap.entries())
+    .map(([id, data]) => ({ id, ...data }))
+    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+
+  sucursalesTodas.forEach((s) => {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = `${s.nombre || "Sin nombre"}${s.activa ? "" : " (Inactiva)"}`;
+    filtroSucursal.appendChild(opt);
+  });
+}
+
+function escucharSucursales() {
+  db.collection("sucursales")
+    .orderBy("nombre", "asc")
+    .onSnapshot((snapshot) => {
+      sucursalesMap = new Map();
+
+      snapshot.forEach((doc) => {
+        const data = doc.data() || {};
+        sucursalesMap.set(doc.id, {
+          nombre: data.nombre || "Sin nombre",
+          activa: data.activa === true
+        });
+      });
+
+      fillSucursalSelects();
+
+      // Si la sucursal seleccionada para registrar ya no existe o está inactiva -> limpiar
+      const selId = sucursalSelect.value;
+      if (selId) {
+        const s = sucursalesMap.get(String(selId));
+        if (!s || s.activa !== true) {
+          sucursalSelect.value = "";
+        }
+      }
+
+      renderTodo();
+    });
+}
+
 function abrirModalEliminar(id) {
   deleteId = id;
   modalBackdrop.style.display = "flex";
@@ -95,15 +170,19 @@ function cerrarModalEliminar() {
   modalBackdrop.style.display = "none";
 }
 
+// ============================
+// FILTROS (por sucursalId)
+// ============================
+
 function getGastosFiltrados() {
-  const suc = filtroSucursal.value;
+  const suc = filtroSucursal.value; // ahora es sucursalId
   const cat = filtroCategoria.value;
   const fecha = filtroFecha.value;
 
   let lista = [...gastosCache];
 
   if (suc !== "todas") {
-    lista = lista.filter(g => String(g.sucursal) === String(suc));
+    lista = lista.filter(g => String(g.sucursalId || "") === String(suc));
   }
 
   if (cat !== "todas") {
@@ -132,7 +211,9 @@ function renderTabla() {
     const fecha = g.createdAt?.toDate ? g.createdAt.toDate() : null;
     const fechaTxt = fecha ? fecha.toLocaleString("es-MX") : "-";
 
-    const sucTxt = escapeHtml(g.sucursal || "-");
+    const sucNombre = g.sucursalNombre || getSucursalNombreById(g.sucursalId);
+    const sucTxt = escapeHtml(sucNombre || "-");
+
     const catTxt = escapeHtml(g.categoria || "-");
     const descTxt = escapeHtml(g.descripcion || "-");
     const total = formatNumber(g.totalPesos || 0, 2);
@@ -202,6 +283,9 @@ auth.onAuthStateChanged((user) => {
   loading.style.display = "none";
   app.style.display = "block";
 
+  // Escuchar sucursales dinámicas
+  escucharSucursales();
+
   db.collection("gastos")
     .orderBy("createdAt", "desc")
     .limit(1000)
@@ -243,13 +327,22 @@ formGasto.addEventListener("submit", async (e) => {
 
   setMsg("");
 
-  const sucursal = sucursalSelect.value;
+  const sucursalId = sucursalSelect.value;
+  const sucursalNombre = getSucursalNombreById(sucursalId);
+
   const categoria = categoriaSelect.value;
   const descripcion = descripcionInput.value.trim();
   const monto = Number(montoInput.value || 0);
 
-  if (!sucursal || !categoria || !descripcion || monto <= 0) {
+  if (!sucursalId || !categoria || !descripcion || monto <= 0) {
     setMsg("Completa todos los campos correctamente.");
+    return;
+  }
+
+  // Evitar registrar en sucursal inactiva
+  const sucObj = sucursalesMap.get(String(sucursalId));
+  if (!sucObj || sucObj.activa !== true) {
+    setMsg("Esa sucursal está inactiva. Selecciona otra.");
     return;
   }
 
@@ -257,7 +350,8 @@ formGasto.addEventListener("submit", async (e) => {
 
   try {
     await db.collection("gastos").add({
-      sucursal: String(sucursal),
+      sucursalId: String(sucursalId),
+      sucursalNombre: String(sucursalNombre || ""),
       categoria,
       descripcion,
       totalPesos: monto,

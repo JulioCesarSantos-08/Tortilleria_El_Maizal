@@ -35,6 +35,9 @@ const btnExcel = document.getElementById("btnExcel");
 let ventasCache = [];
 let gastosCache = [];
 
+// Cache sucursales
+let sucursalesMap = new Map(); // id -> {nombre, activa}
+
 function formatMoney(n) {
   return "$" + Number(n || 0).toLocaleString("es-MX", {
     minimumFractionDigits: 2,
@@ -63,16 +66,65 @@ function setMsg(text = "", isError = true) {
   msg.textContent = text;
 }
 
+// ============================
+// SUCURSALES DINAMICAS
+// ============================
+
+function getSucursalNombreById(id) {
+  if (!id) return "-";
+  const s = sucursalesMap.get(String(id));
+  return s?.nombre || "-";
+}
+
+function fillFiltroSucursal() {
+  filtroSucursal.innerHTML = `<option value="todas">Todas</option>`;
+
+  // Mostrar todas (activas e inactivas) para consultar historial
+  const sucursalesTodas = Array.from(sucursalesMap.entries())
+    .map(([id, data]) => ({ id, ...data }))
+    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+
+  sucursalesTodas.forEach((s) => {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = `${s.nombre || "Sin nombre"}${s.activa ? "" : " (Inactiva)"}`;
+    filtroSucursal.appendChild(opt);
+  });
+}
+
+function escucharSucursales() {
+  db.collection("sucursales")
+    .orderBy("nombre", "asc")
+    .onSnapshot((snapshot) => {
+      sucursalesMap = new Map();
+
+      snapshot.forEach((doc) => {
+        const data = doc.data() || {};
+        sucursalesMap.set(doc.id, {
+          nombre: data.nombre || "Sin nombre",
+          activa: data.activa === true
+        });
+      });
+
+      fillFiltroSucursal();
+      renderTodo();
+    });
+}
+
+// ============================
+// FILTROS (por sucursalId)
+// ============================
+
 function getFiltrados() {
-  const suc = filtroSucursal.value;
+  const suc = filtroSucursal.value; // ahora es sucursalId
   const fecha = filtroFecha.value;
 
   let ventas = [...ventasCache];
   let gastos = [...gastosCache];
 
   if (suc !== "todas") {
-    ventas = ventas.filter(v => String(v.sucursal) === String(suc));
-    gastos = gastos.filter(g => String(g.sucursal) === String(suc));
+    ventas = ventas.filter(v => String(v.sucursalId || "") === String(suc));
+    gastos = gastos.filter(g => String(g.sucursalId || "") === String(suc));
   }
 
   if (fecha) {
@@ -144,7 +196,10 @@ function renderTablasPorFecha(ventas, gastos) {
       const kilos = formatNumber(v.kilos || 0, 1);
       const precio = formatNumber(v.precioKilo || 0, 2);
       const total = formatNumber(v.totalPesos || 0, 2);
-      const suc = escapeHtml(v.sucursal || "-");
+
+      // nombre real de sucursal
+      const sucNombre = v.sucursalNombre || getSucursalNombreById(v.sucursalId);
+      const suc = escapeHtml(sucNombre || "-");
 
       return `
         <tr>
@@ -159,7 +214,10 @@ function renderTablasPorFecha(ventas, gastos) {
     }).join("");
 
     const gastosRows = gList.map((g) => {
-      const suc = escapeHtml(g.sucursal || "-");
+      // nombre real de sucursal
+      const sucNombre = g.sucursalNombre || getSucursalNombreById(g.sucursalId);
+      const suc = escapeHtml(sucNombre || "-");
+
       const cat = escapeHtml(g.categoria || "-");
       const desc = escapeHtml(g.descripcion || "-");
       const total = formatNumber(g.totalPesos || 0, 2);
@@ -236,6 +294,10 @@ function renderTodo() {
   renderTablasPorFecha(ventas, gastos);
 }
 
+// ============================
+// EXCEL (con sucursalNombre)
+// ============================
+
 function descargarExcelXLSX(ventas, gastos) {
   const map = {};
 
@@ -271,8 +333,10 @@ function descargarExcelXLSX(ventas, gastos) {
     rows.push(["Sucursal", "Tipo", "Empleado", "Kilos", "PrecioKilo", "Total"]);
 
     vList.forEach((v) => {
+      const sucNombre = v.sucursalNombre || getSucursalNombreById(v.sucursalId);
+
       rows.push([
-        v.sucursal || "",
+        sucNombre || "",
         v.tipoVenta || "",
         v.empleadoNombre || "Local",
         Number(v.kilos || 0),
@@ -286,8 +350,10 @@ function descargarExcelXLSX(ventas, gastos) {
     rows.push(["Sucursal", "Categoria", "Descripcion", "Total"]);
 
     gList.forEach((g) => {
+      const sucNombre = g.sucursalNombre || getSucursalNombreById(g.sucursalId);
+
       rows.push([
-        g.sucursal || "",
+        sucNombre || "",
         g.categoria || "",
         g.descripcion || "",
         Number(g.totalPesos || 0)
@@ -313,6 +379,10 @@ function descargarExcelXLSX(ventas, gastos) {
   XLSX.writeFile(wb, fileName);
 }
 
+// ============================
+// AUTH + LISTENERS
+// ============================
+
 auth.onAuthStateChanged((user) => {
   if (!user) {
     window.location.href = "index.html";
@@ -322,6 +392,8 @@ auth.onAuthStateChanged((user) => {
   userEmail.textContent = user.email || "Usuario";
   loading.style.display = "none";
   app.style.display = "block";
+
+  escucharSucursales();
 
   db.collection("ventas")
     .orderBy("createdAt", "desc")

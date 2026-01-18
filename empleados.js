@@ -20,9 +20,6 @@ const app = document.getElementById("app");
 const userEmail = document.getElementById("userEmail");
 
 const btnBack = document.getElementById("btnBack");
-// ❌ ya NO existen en empleados.html, por eso los quitamos:
-// const btnGoVentas = document.getElementById("btnGoVentas");
-// const btnGoGastos = document.getElementById("btnGoGastos");
 
 const formEmpleado = document.getElementById("formEmpleado");
 const nombreInput = document.getElementById("nombre");
@@ -33,9 +30,9 @@ const btnGuardar = document.getElementById("btnGuardar");
 const btnCancelar = document.getElementById("btnCancelar");
 const btnBorrarTodos = document.getElementById("btnBorrarTodos");
 
-const tbody1 = document.getElementById("tbody1");
-const tbody2 = document.getElementById("tbody2");
-const tbody3 = document.getElementById("tbody3");
+// 🔥 ahora ya NO usaremos tbody1/tbody2/tbody3 fijos
+// vamos a generar tablas dinámicas en un contenedor:
+const tablasWrap = document.getElementById("tablasWrap");
 
 const modalBackdrop = document.getElementById("modalBackdrop");
 const btnModalCancelar = document.getElementById("btnModalCancelar");
@@ -44,7 +41,11 @@ const btnModalEliminar = document.getElementById("btnModalEliminar");
 let editId = null;
 let deleteId = null;
 
-// ✅ para que los mensajes no se queden pegados
+// Cache
+let empleadosDocs = [];
+let sucursalesMap = new Map(); // id -> {nombre, activa}
+
+// mensajes
 let msgTimer = null;
 
 function setMsg(text = "", isError = true, autoClearMs = 2500) {
@@ -53,12 +54,20 @@ function setMsg(text = "", isError = true, autoClearMs = 2500) {
 
   if (msgTimer) clearTimeout(msgTimer);
 
-  // si mandas vacío, no programamos limpieza
   if (!text) return;
 
   msgTimer = setTimeout(() => {
     msg.textContent = "";
   }, autoClearMs);
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function limpiarForm() {
@@ -80,14 +89,55 @@ function cerrarModalEliminar() {
   modalBackdrop.style.display = "none";
 }
 
-function escapeHtml(text) {
-  return String(text)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+// ============================
+// SUCURSALES DINAMICAS
+// ============================
+
+function getSucursalNombreById(id) {
+  if (!id) return "Sin sucursal";
+  const s = sucursalesMap.get(String(id));
+  return s?.nombre || "Sucursal eliminada";
 }
+
+function fillSucursalSelect() {
+  // Solo activas para registrar
+  sucursalSelect.innerHTML = `<option value="">Selecciona sucursal</option>`;
+
+  const sucursalesActivas = Array.from(sucursalesMap.entries())
+    .map(([id, data]) => ({ id, ...data }))
+    .filter(s => s.activa === true)
+    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+
+  sucursalesActivas.forEach((s) => {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = s.nombre || "Sin nombre";
+    sucursalSelect.appendChild(opt);
+  });
+}
+
+function escucharSucursales() {
+  db.collection("sucursales")
+    .orderBy("nombre", "asc")
+    .onSnapshot((snapshot) => {
+      sucursalesMap = new Map();
+
+      snapshot.forEach((doc) => {
+        const data = doc.data() || {};
+        sucursalesMap.set(doc.id, {
+          nombre: data.nombre || "Sin nombre",
+          activa: data.activa === true
+        });
+      });
+
+      fillSucursalSelect();
+      renderTablasDinamicas();
+    });
+}
+
+// ============================
+// RENDER DINAMICO
+// ============================
 
 function renderRow(doc) {
   const data = doc.data();
@@ -109,20 +159,78 @@ function renderRow(doc) {
   `;
 }
 
-function renderTablas(docs) {
-  tbody1.innerHTML = "";
-  tbody2.innerHTML = "";
-  tbody3.innerHTML = "";
+function renderTablasDinamicas() {
+  if (!tablasWrap) return;
 
-  docs.forEach((doc) => {
-    const data = doc.data();
-    const suc = String(data.sucursal || "");
-    const row = renderRow(doc);
+  // Agrupar empleados por sucursalId
+  const grupos = new Map(); // sucursalId -> [docs]
 
-    if (suc === "1") tbody1.innerHTML += row;
-    else if (suc === "2") tbody2.innerHTML += row;
-    else if (suc === "3") tbody3.innerHTML += row;
+  empleadosDocs.forEach((doc) => {
+    const data = doc.data() || {};
+    const sucId = String(data.sucursalId || "");
+
+    if (!grupos.has(sucId)) grupos.set(sucId, []);
+    grupos.get(sucId).push(doc);
   });
+
+  // Orden de sucursales: primero las que existen en sucursalesMap por nombre
+  const sucursalesOrdenadas = Array.from(sucursalesMap.entries())
+    .map(([id, data]) => ({ id, ...data }))
+    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+
+  // También incluir sucursales "fantasma" (eliminadas) si hay empleados ahí
+  const idsEnEmpleados = Array.from(grupos.keys()).filter(id => id && !sucursalesMap.has(id));
+  const sucursalesEliminadas = idsEnEmpleados.map(id => ({
+    id,
+    nombre: "Sucursal eliminada",
+    activa: false
+  }));
+
+  const todas = [...sucursalesOrdenadas, ...sucursalesEliminadas];
+
+  // Render
+  tablasWrap.innerHTML = "";
+
+  if (todas.length === 0) {
+    tablasWrap.innerHTML = `<p style="margin-top:10px;font-weight:800;color:#555;">No hay sucursales registradas.</p>`;
+    return;
+  }
+
+  todas.forEach((suc) => {
+    const lista = grupos.get(String(suc.id)) || [];
+    const titulo = escapeHtml(suc.nombre || "Sin nombre");
+    const badge = suc.activa ? "" : ` <span style="font-size:.85rem;color:#b00020;font-weight:900;">(Inactiva)</span>`;
+
+    let rows = "";
+    lista.forEach((doc) => {
+      rows += renderRow(doc);
+    });
+
+    const tablaHtml = `
+      <section class="card">
+        <h2>Empleados - ${titulo}${badge}</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Rol</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows || `<tr><td colspan="3" style="padding:12px;color:#555;font-weight:800;">Sin empleados</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+
+    tablasWrap.innerHTML += tablaHtml;
+  });
+
+  attachActions();
 }
 
 function attachActions() {
@@ -132,12 +240,22 @@ function attachActions() {
       const snap = await db.collection("empleados").doc(id).get();
       if (!snap.exists) return;
 
-      const data = snap.data();
+      const data = snap.data() || {};
       editId = id;
 
       nombreInput.value = data.nombre || "";
-      sucursalSelect.value = String(data.sucursal || "");
       rolSelect.value = data.rol || "";
+
+      // Seleccionar sucursal (solo si está activa en el select)
+      const sucId = String(data.sucursalId || "");
+      const existsOption = Array.from(sucursalSelect.options).some(o => String(o.value) === sucId);
+
+      if (existsOption) {
+        sucursalSelect.value = sucId;
+      } else {
+        // si la sucursal está inactiva o eliminada, lo dejamos vacío
+        sucursalSelect.value = "";
+      }
 
       btnCancelar.style.display = "inline-block";
       btnGuardar.textContent = "Guardar cambios";
@@ -154,6 +272,10 @@ function attachActions() {
   });
 }
 
+// ============================
+// AUTH + LISTENERS
+// ============================
+
 auth.onAuthStateChanged((user) => {
   if (!user) {
     window.location.href = "index.html";
@@ -164,11 +286,13 @@ auth.onAuthStateChanged((user) => {
   loading.style.display = "none";
   app.style.display = "block";
 
+  escucharSucursales();
+
   db.collection("empleados")
     .orderBy("createdAt", "desc")
     .onSnapshot((snapshot) => {
-      renderTablas(snapshot.docs);
-      attachActions();
+      empleadosDocs = snapshot.docs;
+      renderTablasDinamicas();
     });
 });
 
@@ -181,15 +305,6 @@ btnBack.addEventListener("click", () => {
   window.location.href = "panel.html";
 });
 
-// ❌ eliminamos estos eventos porque ya quitaste esos botones del HTML
-// btnGoVentas.addEventListener("click", () => {
-//   window.location.href = "empleados2.html";
-// });
-
-// btnGoGastos.addEventListener("click", () => {
-//   window.location.href = "gastos.html";
-// });
-
 btnCancelar.addEventListener("click", () => {
   limpiarForm();
   setMsg("");
@@ -198,17 +313,25 @@ btnCancelar.addEventListener("click", () => {
 formEmpleado.addEventListener("submit", async (e) => {
   e.preventDefault();
 
-  // 👇 cada vez que guardas, limpiamos el mensaje anterior
   setMsg("");
 
   const nombre = nombreInput.value.trim();
-  const sucursal = sucursalSelect.value;
+  const sucursalId = sucursalSelect.value;
   const rol = rolSelect.value;
 
-  if (!nombre || !sucursal || !rol) {
+  if (!nombre || !sucursalId || !rol) {
     setMsg("Completa todos los campos.");
     return;
   }
+
+  // Evitar registrar en sucursal inactiva
+  const sucObj = sucursalesMap.get(String(sucursalId));
+  if (!sucObj || sucObj.activa !== true) {
+    setMsg("Esa sucursal está inactiva. Selecciona otra.");
+    return;
+  }
+
+  const sucursalNombre = sucObj.nombre || "";
 
   btnGuardar.disabled = true;
 
@@ -216,8 +339,9 @@ formEmpleado.addEventListener("submit", async (e) => {
     if (editId) {
       await db.collection("empleados").doc(editId).update({
         nombre,
-        sucursal,
-        rol
+        rol,
+        sucursalId: String(sucursalId),
+        sucursalNombre: String(sucursalNombre)
       });
 
       setMsg("Empleado actualizado.", false);
@@ -225,8 +349,9 @@ formEmpleado.addEventListener("submit", async (e) => {
     } else {
       await db.collection("empleados").add({
         nombre,
-        sucursal,
         rol,
+        sucursalId: String(sucursalId),
+        sucursalNombre: String(sucursalNombre),
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
 
@@ -253,6 +378,8 @@ btnBorrarTodos.addEventListener("click", async () => {
       return;
     }
 
+    // OJO: batch máximo 500, pero aquí normalmente son pocos.
+    // Si quieres lo hacemos por chunks luego.
     const batch = db.batch();
     snap.docs.forEach((doc) => batch.delete(doc.ref));
     await batch.commit();

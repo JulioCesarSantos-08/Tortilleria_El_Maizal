@@ -57,6 +57,9 @@ let ventasCache = [];
 let gastosCache = [];
 let msgTimer = null;
 
+// Cache de sucursales: { id -> {nombre, activa} }
+let sucursalesMap = new Map();
+
 function setMsg(text = "", isError = true, autoClear = true) {
   msg.style.color = isError ? "#b00020" : "#1f8a4c";
   msg.textContent = text;
@@ -99,11 +102,92 @@ function escapeHtml(text) {
     .replaceAll("'", "&#039;");
 }
 
-async function cargarEmpleadosPorSucursal(sucursal) {
-  empleadoSelect.innerHTML = `<option value="">Selecciona empleado</option>`;
-  if (!sucursal) return;
+// ============================
+// SUCURSALES DINAMICAS
+// ============================
 
-  const snap = await db.collection("empleados").where("sucursal", "==", String(sucursal)).get();
+function getSucursalNombreById(id) {
+  if (!id) return "-";
+  const s = sucursalesMap.get(String(id));
+  return s?.nombre || "-";
+}
+
+function fillSucursalSelects() {
+  // Select de registrar venta
+  sucursalSelect.innerHTML = `<option value="">Selecciona sucursal</option>`;
+
+  // Select de filtro
+  filtroSucursal.innerHTML = `<option value="todas">Todas</option>`;
+
+  // Solo activas para registrar
+  const sucursalesActivas = Array.from(sucursalesMap.entries())
+    .map(([id, data]) => ({ id, ...data }))
+    .filter(s => s.activa === true)
+    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+
+  sucursalesActivas.forEach((s) => {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = s.nombre || "Sin nombre";
+    sucursalSelect.appendChild(opt);
+  });
+
+  // En filtros: mostramos todas (activas e inactivas) para consultar historial
+  const sucursalesTodas = Array.from(sucursalesMap.entries())
+    .map(([id, data]) => ({ id, ...data }))
+    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+
+  sucursalesTodas.forEach((s) => {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = `${s.nombre || "Sin nombre"}${s.activa ? "" : " (Inactiva)"}`;
+    filtroSucursal.appendChild(opt);
+  });
+}
+
+function escucharSucursales() {
+  db.collection("sucursales")
+    .orderBy("nombre", "asc")
+    .onSnapshot((snapshot) => {
+      sucursalesMap = new Map();
+
+      snapshot.forEach((doc) => {
+        const data = doc.data() || {};
+        sucursalesMap.set(doc.id, {
+          nombre: data.nombre || "Sin nombre",
+          activa: data.activa === true
+        });
+      });
+
+      // Rellenar selects
+      fillSucursalSelects();
+
+      // Si la sucursal seleccionada para registrar ya no existe o está inactiva -> limpiar
+      const selId = sucursalSelect.value;
+      if (selId) {
+        const s = sucursalesMap.get(String(selId));
+        if (!s || s.activa !== true) {
+          sucursalSelect.value = "";
+          empleadoSelect.innerHTML = `<option value="">Selecciona empleado</option>`;
+        }
+      }
+
+      renderTodo();
+    });
+}
+
+// ============================
+// EMPLEADOS POR SUCURSAL (ID)
+// ============================
+
+async function cargarEmpleadosPorSucursalId(sucursalId) {
+  empleadoSelect.innerHTML = `<option value="">Selecciona empleado</option>`;
+  if (!sucursalId) return;
+
+  const snap = await db
+    .collection("empleados")
+    .where("sucursalId", "==", String(sucursalId))
+    .get();
 
   snap.forEach((doc) => {
     const data = doc.data();
@@ -124,15 +208,19 @@ function cerrarModalEliminar() {
   modalBackdrop.style.display = "none";
 }
 
+// ============================
+// FILTROS (por sucursalId)
+// ============================
+
 function getVentasFiltradas() {
-  const suc = filtroSucursal.value;
+  const suc = filtroSucursal.value; // ahora es sucursalId
   const tipo = filtroTipo.value;
   const fecha = filtroFecha.value;
 
   let lista = [...ventasCache];
 
   if (suc !== "todas") {
-    lista = lista.filter(v => String(v.sucursal) === String(suc));
+    lista = lista.filter(v => String(v.sucursalId || "") === String(suc));
   }
 
   if (tipo !== "todos") {
@@ -147,13 +235,13 @@ function getVentasFiltradas() {
 }
 
 function getGastosFiltrados() {
-  const suc = filtroSucursal.value;
+  const suc = filtroSucursal.value; // ahora es sucursalId
   const fecha = filtroFecha.value;
 
   let lista = [...gastosCache];
 
   if (suc !== "todas") {
-    lista = lista.filter(g => String(g.sucursal) === String(suc));
+    lista = lista.filter(g => String(g.sucursalId || "") === String(suc));
   }
 
   if (fecha) {
@@ -189,7 +277,9 @@ function renderTabla() {
     const fecha = v.createdAt?.toDate ? v.createdAt.toDate() : null;
     const fechaTxt = fecha ? fecha.toLocaleString("es-MX") : "-";
 
-    const sucTxt = escapeHtml(v.sucursal || "-");
+    const sucNombre = v.sucursalNombre || getSucursalNombreById(v.sucursalId);
+    const sucTxt = escapeHtml(sucNombre || "-");
+
     const tipoTxt = escapeHtml(v.tipoVenta || "-");
     const empTxt = escapeHtml(v.empleadoNombre || "Local");
 
@@ -264,6 +354,9 @@ auth.onAuthStateChanged((user) => {
   loading.style.display = "none";
   app.style.display = "block";
 
+  // Escuchar sucursales dinámicas
+  escucharSucursales();
+
   db.collection("ventas")
     .orderBy("createdAt", "desc")
     .limit(1000)
@@ -296,7 +389,7 @@ btnLogout.addEventListener("click", async () => {
 
 sucursalSelect.addEventListener("change", async () => {
   setMsg("");
-  await cargarEmpleadosPorSucursal(sucursalSelect.value);
+  await cargarEmpleadosPorSucursalId(sucursalSelect.value);
 });
 
 tipoVentaSelect.addEventListener("change", async () => {
@@ -306,7 +399,7 @@ tipoVentaSelect.addEventListener("change", async () => {
   if (tipo === "repartidor") {
     fieldEmpleado.style.display = "block";
     empleadoSelect.required = true;
-    await cargarEmpleadosPorSucursal(sucursalSelect.value);
+    await cargarEmpleadosPorSucursalId(sucursalSelect.value);
   } else {
     fieldEmpleado.style.display = "none";
     empleadoSelect.required = false;
@@ -340,14 +433,23 @@ formVenta.addEventListener("submit", async (e) => {
 
   setMsg("");
 
-  const sucursal = sucursalSelect.value;
+  const sucursalId = sucursalSelect.value;
+  const sucursalNombre = getSucursalNombreById(sucursalId);
+
   const tipoVenta = tipoVentaSelect.value;
   const kilos = Number(kilosInput.value || 0);
   const precioKilo = Number(precioKiloInput.value || 0);
   const totalPesos = kilos * precioKilo;
 
-  if (!sucursal || !tipoVenta) {
+  if (!sucursalId || !tipoVenta) {
     setMsg("Completa todos los campos.");
+    return;
+  }
+
+  // Evitar registrar en sucursal inactiva
+  const sucObj = sucursalesMap.get(String(sucursalId));
+  if (!sucObj || sucObj.activa !== true) {
+    setMsg("Esa sucursal está inactiva. Selecciona otra.");
     return;
   }
 
@@ -381,7 +483,8 @@ formVenta.addEventListener("submit", async (e) => {
 
   try {
     await db.collection("ventas").add({
-      sucursal: String(sucursal),
+      sucursalId: String(sucursalId),
+      sucursalNombre: String(sucursalNombre || ""),
       tipoVenta,
       empleadoId,
       empleadoNombre,

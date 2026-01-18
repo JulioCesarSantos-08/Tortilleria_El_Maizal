@@ -109,6 +109,7 @@ body{
   background: linear-gradient(90deg, var(--maiz-green), var(--maiz-orange));
   color: var(--white);
   font-size:.9rem;
+  transition: transform .08s ease, filter .15s ease;
 }
 
 .container{
@@ -133,6 +134,7 @@ body{
   font-weight:900;
   background: rgba(31,138,76,.12);
   color: var(--maiz-green);
+  transition: transform .08s ease, filter .15s ease;
 }
 
 .btn-go{
@@ -143,6 +145,7 @@ body{
   font-weight:900;
   background: linear-gradient(90deg, var(--maiz-orange), var(--maiz-yellow));
   color: var(--black);
+  transition: transform .08s ease, filter .15s ease;
 }
 
 .btn-go2{
@@ -153,6 +156,7 @@ body{
   font-weight:900;
   background: rgba(242,201,76,.25);
   color: var(--black);
+  transition: transform .08s ease, filter .15s ease;
 }
 
 .card{
@@ -228,6 +232,7 @@ body{
   font-size:1rem;
   color: var(--white);
   background: linear-gradient(90deg, var(--maiz-green), var(--maiz-orange));
+  transition: transform .08s ease, filter .15s ease, opacity .15s ease;
 }
 
 .msg{
@@ -316,6 +321,10 @@ tbody td{
   color:#333;
 }
 
+tbody tr:hover{
+  background: rgba(242,201,76,.08);
+}
+
 .btn-mini{
   border:none;
   cursor:pointer;
@@ -325,6 +334,7 @@ tbody td{
   font-size:.85rem;
   background: rgba(176,0,32,.10);
   color: var(--danger);
+  transition: transform .08s ease, filter .15s ease;
 }
 
 .loading{
@@ -385,6 +395,7 @@ tbody td{
   font-size:1rem;
   color: var(--black);
   background: linear-gradient(90deg, var(--maiz-yellow), var(--maiz-orange));
+  transition: transform .08s ease, filter .15s ease;
 }
 
 .btn-danger{
@@ -397,6 +408,7 @@ tbody td{
   font-size:1rem;
   color: var(--white);
   background: var(--danger);
+  transition: transform .08s ease, filter .15s ease;
 }
 
 @media (min-width: 900px){
@@ -409,6 +421,7 @@ tbody td{
     grid-template-columns: repeat(4, 1fr);
   }
 }
+
 .reset-box{
   display:flex;
   gap:10px;
@@ -443,4 +456,69 @@ tbody td{
   font-weight:900;
   background: rgba(31,138,76,.12);
   color: var(--maiz-green);
+  transition: transform .08s ease, filter .15s ease;
+}
+
+/* =========================
+   MEJORAS EXTRA (PRO)
+   ========================= */
+
+/* Botones hover / active */
+.btn-primary:hover,
+.btn-back:hover,
+.btn-go:hover,
+.btn-go2:hover,
+.btn-secondary:hover,
+.btn-danger:hover,
+.btn-logout:hover,
+.btn-mini:hover,
+.btn-clear:hover{
+  filter: brightness(1.03);
+}
+
+.btn-primary:active,
+.btn-back:active,
+.btn-go:active,
+.btn-go2:active,
+.btn-secondary:active,
+.btn-danger:active,
+.btn-logout:active,
+.btn-mini:active,
+.btn-clear:active{
+  transform: translateY(1px);
+}
+
+/* Botones deshabilitados */
+button:disabled{
+  opacity: .55;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Inputs/Select deshabilitados */
+input:disabled,
+select:disabled{
+  opacity: .7;
+  cursor: not-allowed;
+  background: #fafafa;
+}
+
+/* Tablas en móvil más cómodas */
+@media (max-width: 520px){
+  .topbar-inner{
+    padding: 10px 12px;
+  }
+
+  .brand img{
+    width:40px;
+    height:40px;
+  }
+
+  .userbox .email{
+    max-width: 160px;
+  }
+
+  table{
+    min-width: 880px;
+  }
 }

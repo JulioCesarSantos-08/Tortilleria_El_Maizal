@@ -111,6 +111,7 @@ body{
   background: linear-gradient(90deg, var(--maiz-green), var(--maiz-orange));
   color: var(--white);
   font-size:.9rem;
+  transition: transform .08s ease, filter .15s ease;
 }
 
 .container{
@@ -135,28 +136,8 @@ body{
   font-weight:900;
   background: rgba(31,138,76,.12);
   color: var(--maiz-green);
+  transition: transform .08s ease, filter .15s ease;
 }
-
-.btn-go{
-  border:none;
-  cursor:pointer;
-  padding:10px 14px;
-  border-radius:14px;
-  font-weight:900;
-  background: linear-gradient(90deg, var(--maiz-orange), var(--maiz-yellow));
-  color: var(--black);
-}
-
-.btn-go2{
-  border:none;
-  cursor:pointer;
-  padding:10px 14px;
-  border-radius:14px;
-  font-weight:900;
-  background: rgba(242,201,76,.25);
-  color: var(--black);
-}
-
 
 .card{
   margin-top: 14px;
@@ -171,6 +152,12 @@ body{
   font-size: 1.25rem;
   font-weight: 900;
   margin-bottom: 12px;
+}
+
+.card h2{
+  font-size: 1.05rem;
+  font-weight: 900;
+  margin-bottom: 10px;
 }
 
 .form{
@@ -225,6 +212,7 @@ body{
   font-size:1rem;
   color: var(--white);
   background: linear-gradient(90deg, var(--maiz-green), var(--maiz-orange));
+  transition: transform .08s ease, filter .15s ease, opacity .15s ease;
 }
 
 .btn-secondary{
@@ -238,17 +226,21 @@ body{
   font-size:1rem;
   color: var(--black);
   background: linear-gradient(90deg, var(--maiz-yellow), var(--maiz-orange));
+  transition: transform .08s ease, filter .15s ease;
 }
 
 .btn-danger{
+  flex:1;
+  min-width: 170px;
   padding:12px 14px;
   border:none;
   border-radius:14px;
   cursor:pointer;
   font-weight:900;
   font-size:1rem;
-  color: var(--white);
+  color:#fff;
   background: var(--danger);
+  transition: transform .08s ease, filter .15s ease;
 }
 
 .msg{
@@ -259,26 +251,12 @@ body{
   color: var(--danger);
 }
 
-.grid{
-  margin-top: 16px;
-  display:grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: 12px;
-}
+/* =========================
+   TABLAS
+   ========================= */
 
-.table-card{
-  grid-column: span 12;
-  background: var(--white);
-  border: 1px solid var(--gray-2);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 16px;
-}
-
-.table-card h2{
-  font-size: 1.05rem;
-  font-weight: 900;
-  margin-bottom: 10px;
+#tablasWrap{
+  margin-top: 14px;
 }
 
 .table-wrap{
@@ -310,8 +288,8 @@ tbody td{
   color:#333;
 }
 
-.th-actions{
-  width: 180px;
+tbody tr:hover{
+  background: rgba(242,201,76,.08);
 }
 
 .row-actions{
@@ -327,6 +305,7 @@ tbody td{
   border-radius:12px;
   font-weight:900;
   font-size:.85rem;
+  transition: transform .08s ease, filter .15s ease;
 }
 
 .btn-edit{
@@ -338,6 +317,10 @@ tbody td{
   background: rgba(176,0,32,.10);
   color: var(--danger);
 }
+
+/* =========================
+   LOADING + MODAL
+   ========================= */
 
 .loading{
   display:flex;
@@ -387,6 +370,45 @@ tbody td{
   gap:10px;
 }
 
+/* =========================
+   EFECTOS PRO
+   ========================= */
+
+.btn-primary:hover,
+.btn-secondary:hover,
+.btn-danger:hover,
+.btn-back:hover,
+.btn-logout:hover,
+.btn-mini:hover{
+  filter: brightness(1.03);
+}
+
+.btn-primary:active,
+.btn-secondary:active,
+.btn-danger:active,
+.btn-back:active,
+.btn-logout:active,
+.btn-mini:active{
+  transform: translateY(1px);
+}
+
+button:disabled{
+  opacity: .55;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+input:disabled,
+select:disabled{
+  opacity: .7;
+  cursor: not-allowed;
+  background: #fafafa;
+}
+
+/* =========================
+   RESPONSIVE
+   ========================= */
+
 @media (min-width: 800px){
   .form{
     grid-template-columns: repeat(3, 1fr);
@@ -400,30 +422,19 @@ tbody td{
   .userbox .email{
     max-width: 360px;
   }
+}
 
-  .table-card{
-    grid-column: span 6;
+@media (max-width: 520px){
+  .topbar-inner{
+    padding: 10px 12px;
   }
-}
 
-@media (min-width: 1100px){
-  .table-card{
-    grid-column: span 4;
+  .brand img{
+    width:40px;
+    height:40px;
   }
-}
-.btn-danger{
-  width:100%;
-  padding:12px 14px;
-  border:none;
-  border-radius:14px;
-  cursor:pointer;
-  font-weight:900;
-  font-size:1rem;
-  color:#fff;
-  background:#b00020;
-  transition: transform .08s ease;
-}
 
-.btn-danger:active{
-  transform: scale(.99);
+  .userbox .email{
+    max-width: 160px;
+  }
 }

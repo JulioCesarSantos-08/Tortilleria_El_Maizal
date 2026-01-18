@@ -44,10 +44,7 @@
         <div class="field">
           <label>Sucursal</label>
           <select id="sucursal" required>
-            <option value="">Selecciona</option>
-            <option value="1">Sucursal 1</option>
-            <option value="2">Sucursal 2</option>
-            <option value="3">Sucursal 3</option>
+            <option value="">Cargando sucursales...</option>
           </select>
         </div>
 
@@ -68,60 +65,12 @@
           <button type="button" class="btn-danger" id="btnBorrarTodos">Eliminar todos</button>
         </div>
 
-
         <p class="msg" id="msg"></p>
       </form>
     </section>
 
-    <section class="grid">
-      <div class="table-card">
-        <h2>Sucursal 1</h2>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Nombre</th>
-                <th>Rol</th>
-                <th class="th-actions">Acciones</th>
-              </tr>
-            </thead>
-            <tbody id="tbody1"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="table-card">
-        <h2>Sucursal 2</h2>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Nombre</th>
-                <th>Rol</th>
-                <th class="th-actions">Acciones</th>
-              </tr>
-            </thead>
-            <tbody id="tbody2"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="table-card">
-        <h2>Sucursal 3</h2>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Nombre</th>
-                <th>Rol</th>
-                <th class="th-actions">Acciones</th>
-              </tr>
-            </thead>
-            <tbody id="tbody3"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
+    <!-- 🔥 Aquí se generan las tablas dinámicas por sucursal -->
+    <div id="tablasWrap"></div>
   </main>
 
   <div class="loading" id="loading">

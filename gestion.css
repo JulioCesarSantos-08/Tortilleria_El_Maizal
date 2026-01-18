@@ -151,6 +151,12 @@ body{
   flex-wrap:wrap;
 }
 
+.head-actions{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
 .card h1{
   font-size: 1.25rem;
   font-weight: 900;
@@ -174,6 +180,17 @@ body{
   background: linear-gradient(90deg, var(--maiz-green), var(--maiz-orange));
 }
 
+.btn-add{
+  border:none;
+  cursor:pointer;
+  padding:12px 14px;
+  border-radius:14px;
+  font-weight:900;
+  font-size:1rem;
+  color: var(--black);
+  background: linear-gradient(90deg, var(--maiz-yellow), var(--maiz-orange));
+}
+
 .msg{
   margin-top: 10px;
   min-height:20px;
@@ -193,7 +210,7 @@ body{
 table{
   width:100%;
   border-collapse: collapse;
-  min-width: 700px;
+  min-width: 760px;
 }
 
 thead th{
@@ -227,6 +244,12 @@ tbody td{
   color: var(--danger);
 }
 
+.row-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
 .btn-mini{
   border:none;
   cursor:pointer;
@@ -234,8 +257,21 @@ tbody td{
   border-radius:12px;
   font-weight:900;
   font-size:.85rem;
+}
+
+.btn-edit{
   background: rgba(242,201,76,.25);
-  color: #111;
+  color:#111;
+}
+
+.btn-disable{
+  background: rgba(31,138,76,.12);
+  color: var(--maiz-green);
+}
+
+.btn-del{
+  background: rgba(176,0,32,.10);
+  color: var(--danger);
 }
 
 .loading{
@@ -260,7 +296,7 @@ tbody td{
 
 .modal{
   width:100%;
-  max-width: 460px;
+  max-width: 480px;
   background: var(--white);
   border-radius: 18px;
   border: 1px solid var(--gray-2);
@@ -297,10 +333,13 @@ tbody td{
   background:#fff;
 }
 
-.field input:focus,
-.field select:focus{
-  border-color: rgba(31,138,76,.6);
-  box-shadow: 0 0 0 4px rgba(31,138,76,.12);
+.check-row{
+  margin-top: 12px;
+  display:flex;
+  gap:10px;
+  align-items:center;
+  font-weight:800;
+  color:#222;
 }
 
 .modal-actions{
@@ -319,4 +358,16 @@ tbody td{
   font-size:1rem;
   color: var(--black);
   background: linear-gradient(90deg, var(--maiz-yellow), var(--maiz-orange));
+}
+
+.btn-danger{
+  flex:1;
+  padding:12px 14px;
+  border:none;
+  border-radius:14px;
+  cursor:pointer;
+  font-weight:900;
+  font-size:1rem;
+  color: var(--white);
+  background: var(--danger);
 }

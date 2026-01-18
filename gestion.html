@@ -36,10 +36,18 @@
       <div class="head-row">
         <div>
           <h1>Sucursales</h1>
-          <p class="sub">Cambia el nombre de las sucursales y se reflejará en todo el sistema.</p>
+          <p class="sub">
+            Administra sucursales: agrega, edita, desactiva o elimina.
+            <br>
+            <b>Desactivar</b> evita que se use en nuevos movimientos.
+            <br>
+            <b>Eliminar</b> borrará también sus registros (ventas + gastos) para evitar errores.
+          </p>
         </div>
 
-        <button class="btn-primary" id="btnCrearDefault">Crear sucursales 1, 2, 3</button>
+        <div class="head-actions">
+          <button class="btn-add" id="btnNuevaSucursal">➕ Nueva sucursal</button>
+        </div>
       </div>
 
       <p class="msg" id="msg"></p>
@@ -51,7 +59,7 @@
               <th>ID</th>
               <th>Nombre</th>
               <th>Estado</th>
-              <th>Acción</th>
+              <th style="width:280px;">Acción</th>
             </tr>
           </thead>
           <tbody id="tbodySucursales"></tbody>
@@ -64,11 +72,11 @@
 
   <div class="modal-backdrop" id="modalBackdrop" style="display:none;">
     <div class="modal">
-      <h3>Editar sucursal</h3>
+      <h3 id="modalTitle">Editar sucursal</h3>
 
       <div class="field">
         <label>Nombre</label>
-        <input type="text" id="editNombre" placeholder="Ej. Centro / Norte / Patria" />
+        <input type="text" id="editNombre" placeholder="Ej. Centro / Norte / Mercado" />
       </div>
 
       <div class="field">
@@ -82,6 +90,38 @@
       <div class="modal-actions">
         <button class="btn-secondary" id="btnModalCancelar">Cancelar</button>
         <button class="btn-primary" id="btnModalGuardar">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modalDeleteBackdrop" style="display:none;">
+    <div class="modal">
+      <h3>Eliminar sucursal</h3>
+
+      <p style="margin-top:8px;color:#555;font-weight:700;line-height:1.35;">
+        ⚠ Esta acción eliminará:
+        <br><br>
+        ✅ La sucursal<br>
+        ✅ Sus ventas<br>
+        ✅ Sus gastos<br>
+        <br>
+        (Opcionalmente también empleados de esa sucursal)
+        <br><br>
+        Para confirmar escribe <b>ELIMINAR</b>:
+      </p>
+
+      <div class="field">
+        <input type="text" id="confirmDeleteText" placeholder="Escribe ELIMINAR" />
+      </div>
+
+      <div class="check-row">
+        <input type="checkbox" id="chkEliminarEmpleados" />
+        <label for="chkEliminarEmpleados">Eliminar también empleados de esta sucursal</label>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btnDeleteCancelar">Cancelar</button>
+        <button class="btn-danger" id="btnDeleteConfirmar">Eliminar</button>
       </div>
     </div>
   </div>
