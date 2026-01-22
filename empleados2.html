@@ -31,6 +31,8 @@
     <section class="actions-top">
       <button class="btn-back" id="btnBack">⬅ Volver al Panel</button>
       <button class="btn-go2" id="btnGoGastos">🧾 Ir a Gastos</button>
+      <button class="btn-go2" id="btnGoEgresos">📦 Egresos</button>
+      <button class="btn-go2" id="btnGoPagos">👷 Pagos</button>
     </section>
 
     <section class="card">
@@ -72,7 +74,7 @@
 
         <div class="field">
           <label>Total en pesos</label>
-          <input type="text" id="totalPesos" readonly />
+          <input type="number" id="totalPesos" step="0.01" min="0" placeholder="Ej. 1360" required />
         </div>
 
         <div class="actions">
@@ -140,6 +142,7 @@
               <th>Kilos</th>
               <th>$ / Kilo</th>
               <th>Total</th>
+              <th>Pago</th>
               <th>Acción</th>
             </tr>
           </thead>
