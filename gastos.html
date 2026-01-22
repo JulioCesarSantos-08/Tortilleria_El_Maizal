@@ -31,6 +31,8 @@
     <section class="actions-top">
       <button class="btn-back" id="btnBack">⬅ Volver al Panel</button>
       <button class="btn-go2" id="btnGoVentas">💰 Ventas</button>
+      <button class="btn-go2" id="btnGoEgresos">📦 Egresos</button>
+      <button class="btn-go2" id="btnGoPagos">👷 Pagos</button>
     </section>
 
     <section class="card">
@@ -49,20 +51,22 @@
           <select id="categoria" required>
             <option value="">Selecciona</option>
             <option value="Gasolina">Gasolina</option>
-            <option value="Masa">Masa</option>
-            <option value="Gas">Gas</option>
-            <option value="Luz">Luz</option>
-            <option value="Agua">Agua</option>
-            <option value="Renta">Renta</option>
-            <option value="Mantenimiento">Mantenimiento</option>
-            <option value="Bolsas">Bolsas</option>
-            <option value="Otro">Otro</option>
+            <option value="Trabajadores">Trabajadores</option>
+            <option value="Otros">Otros</option>
+          </select>
+        </div>
+
+        <!-- NUEVO: Colaborador (solo cuando categoría = Trabajadores) -->
+        <div class="field" id="fieldColaborador" style="display:none;">
+          <label>Colaborador</label>
+          <select id="colaborador">
+            <option value="">Selecciona colaborador</option>
           </select>
         </div>
 
         <div class="field">
           <label>Descripción</label>
-          <input type="text" id="descripcion" placeholder="Ej. Gasolina repartidor / Compra de masa" required />
+          <input type="text" id="descripcion" placeholder="Ej. Gasolina repartidor / Pago empleados" required />
         </div>
 
         <div class="field">
@@ -89,14 +93,8 @@
         <select id="filtroCategoria">
           <option value="todas">Todas las categorías</option>
           <option value="Gasolina">Gasolina</option>
-          <option value="Masa">Masa</option>
-          <option value="Gas">Gas</option>
-          <option value="Luz">Luz</option>
-          <option value="Agua">Agua</option>
-          <option value="Renta">Renta</option>
-          <option value="Mantenimiento">Mantenimiento</option>
-          <option value="Bolsas">Bolsas</option>
-          <option value="Otro">Otro</option>
+          <option value="Trabajadores">Trabajadores</option>
+          <option value="Otros">Otros</option>
         </select>
 
         <input type="date" id="filtroFecha" />
@@ -136,6 +134,7 @@
 
   <div class="loading" id="loading">Verificando sesión...</div>
 
+  <!-- Modal eliminar -->
   <div class="modal-backdrop" id="modalBackdrop" style="display:none;">
     <div class="modal">
       <h3>Eliminar gasto</h3>
@@ -143,6 +142,55 @@
       <div class="modal-actions">
         <button class="btn-secondary" id="btnModalCancelar">Cancelar</button>
         <button class="btn-danger" id="btnModalEliminar">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal editar -->
+  <div class="modal-backdrop" id="modalEditBackdrop" style="display:none;">
+    <div class="modal">
+      <h3>Editar gasto</h3>
+
+      <div class="form" style="margin-top:12px;grid-template-columns:1fr;gap:12px;">
+        <div class="field">
+          <label>Sucursal</label>
+          <select id="editSucursal" required>
+            <option value="">Cargando sucursales...</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Categoría</label>
+          <select id="editCategoria" required>
+            <option value="">Selecciona</option>
+            <option value="Gasolina">Gasolina</option>
+            <option value="Trabajadores">Trabajadores</option>
+            <option value="Otros">Otros</option>
+          </select>
+        </div>
+
+        <!-- NUEVO: Editar colaborador (solo cuando categoría = Trabajadores) -->
+        <div class="field" id="editFieldColaborador" style="display:none;">
+          <label>Colaborador</label>
+          <select id="editColaborador">
+            <option value="">Selecciona colaborador</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Descripción</label>
+          <input type="text" id="editDescripcion" placeholder="Ej. Pago semanal colaborador" />
+        </div>
+
+        <div class="field">
+          <label>Monto ($)</label>
+          <input type="number" id="editMonto" step="0.1" min="0" placeholder="Ej. 250" />
+        </div>
+      </div>
+
+      <div class="modal-actions" style="margin-top:14px;">
+        <button class="btn-secondary" id="btnEditCancelar">Cancelar</button>
+        <button class="btn-primary" id="btnEditGuardar">Guardar cambios</button>
       </div>
     </div>
   </div>
