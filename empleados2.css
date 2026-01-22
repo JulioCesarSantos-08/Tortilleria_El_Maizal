@@ -332,9 +332,32 @@ tbody tr:hover{
   border-radius:12px;
   font-weight:900;
   font-size:.85rem;
+  transition: transform .08s ease, filter .15s ease;
+}
+
+.btn-mini:hover{
+  filter: brightness(1.03);
+}
+
+.btn-mini:active{
+  transform: translateY(1px);
+}
+
+.btn-mini.btn-paid{
+  background: rgba(31,138,76,.14);
+  color: var(--maiz-green);
+  border: 1px solid rgba(31,138,76,.25);
+}
+
+.btn-mini.btn-unpaid{
+  background: rgba(176,0,32,.12);
+  color: var(--danger);
+  border: 1px solid rgba(176,0,32,.22);
+}
+
+.btn-mini[data-del]{
   background: rgba(176,0,32,.10);
   color: var(--danger);
-  transition: transform .08s ease, filter .15s ease;
 }
 
 .loading{
@@ -459,11 +482,6 @@ tbody tr:hover{
   transition: transform .08s ease, filter .15s ease;
 }
 
-/* =========================
-   MEJORAS EXTRA (PRO)
-   ========================= */
-
-/* Botones hover / active */
 .btn-primary:hover,
 .btn-back:hover,
 .btn-go:hover,
@@ -488,14 +506,12 @@ tbody tr:hover{
   transform: translateY(1px);
 }
 
-/* Botones deshabilitados */
 button:disabled{
   opacity: .55;
   cursor: not-allowed;
   transform: none !important;
 }
 
-/* Inputs/Select deshabilitados */
 input:disabled,
 select:disabled{
   opacity: .7;
@@ -503,7 +519,6 @@ select:disabled{
   background: #fafafa;
 }
 
-/* Tablas en móvil más cómodas */
 @media (max-width: 520px){
   .topbar-inner{
     padding: 10px 12px;
