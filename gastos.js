@@ -19,6 +19,8 @@ const userEmail = document.getElementById("userEmail");
 
 const btnBack = document.getElementById("btnBack");
 const btnGoVentas = document.getElementById("btnGoVentas");
+const btnGoEgresos = document.getElementById("btnGoEgresos");
+const btnGoPagos = document.getElementById("btnGoPagos");
 const btnLogout = document.getElementById("btnLogout");
 
 const formGasto = document.getElementById("formGasto");
@@ -28,6 +30,10 @@ const descripcionInput = document.getElementById("descripcion");
 const montoInput = document.getElementById("monto");
 const msg = document.getElementById("msg");
 const btnGuardar = document.getElementById("btnGuardar");
+
+// (NUEVO) Select colaborador para categoría Trabajadores
+const fieldColaborador = document.getElementById("fieldColaborador");
+const colaboradorSelect = document.getElementById("colaborador");
 
 const filtroSucursal = document.getElementById("filtroSucursal");
 const filtroCategoria = document.getElementById("filtroCategoria");
@@ -45,11 +51,23 @@ const modalBackdrop = document.getElementById("modalBackdrop");
 const btnModalCancelar = document.getElementById("btnModalCancelar");
 const btnModalEliminar = document.getElementById("btnModalEliminar");
 
+const modalEditBackdrop = document.getElementById("modalEditBackdrop");
+const editSucursal = document.getElementById("editSucursal");
+const editCategoria = document.getElementById("editCategoria");
+const editDescripcion = document.getElementById("editDescripcion");
+const editMonto = document.getElementById("editMonto");
+const btnEditCancelar = document.getElementById("btnEditCancelar");
+const btnEditGuardar = document.getElementById("btnEditGuardar");
+
+// (NUEVO) Edit colaborador
+const editFieldColaborador = document.getElementById("editFieldColaborador");
+const editColaborador = document.getElementById("editColaborador");
+
 let gastosCache = [];
 let deleteId = null;
+let editId = null;
 let msgTimer = null;
 
-// Cache de sucursales: { id -> {nombre, activa} }
 let sucursalesMap = new Map();
 
 function setMsg(text = "", isError = true, autoClear = true) {
@@ -88,24 +106,78 @@ function escapeHtml(text) {
     .replaceAll("'", "&#039;");
 }
 
-// ============================
-// SUCURSALES DINAMICAS
-// ============================
-
 function getSucursalNombreById(id) {
   if (!id) return "-";
   const s = sucursalesMap.get(String(id));
   return s?.nombre || "-";
 }
 
+// ============================
+// COLABORADORES (EMPLEADOS) POR SUCURSAL
+// ============================
+
+async function cargarColaboradoresEnSelect(selectEl, sucursalId, selectedId = "") {
+  if (!selectEl) return;
+
+  selectEl.innerHTML = `<option value="">Selecciona colaborador</option>`;
+
+  if (!sucursalId) return;
+
+  try {
+    const snap = await db
+      .collection("empleados")
+      .where("sucursalId", "==", String(sucursalId))
+      .get();
+
+    snap.forEach((doc) => {
+      const data = doc.data() || {};
+      const opt = document.createElement("option");
+      opt.value = doc.id;
+      opt.textContent = data.nombre || "Sin nombre";
+      selectEl.appendChild(opt);
+    });
+
+    if (selectedId) {
+      selectEl.value = String(selectedId);
+    }
+  } catch (e) {
+    // si falla no rompemos la página
+  }
+}
+
+function toggleColaboradorField() {
+  const cat = categoriaSelect.value;
+  if (!fieldColaborador) return;
+
+  if (cat === "Trabajadores") {
+    fieldColaborador.style.display = "block";
+  } else {
+    fieldColaborador.style.display = "none";
+    if (colaboradorSelect) colaboradorSelect.value = "";
+  }
+}
+
+function toggleEditColaboradorField() {
+  const cat = editCategoria.value;
+  if (!editFieldColaborador) return;
+
+  if (cat === "Trabajadores") {
+    editFieldColaborador.style.display = "block";
+  } else {
+    editFieldColaborador.style.display = "none";
+    if (editColaborador) editColaborador.value = "";
+  }
+}
+
+// ============================
+// SUCURSALES DINAMICAS
+// ============================
+
 function fillSucursalSelects() {
-  // Select de registrar gasto
   sucursalSelect.innerHTML = `<option value="">Selecciona sucursal</option>`;
-
-  // Select de filtro
   filtroSucursal.innerHTML = `<option value="todas">Todas</option>`;
+  editSucursal.innerHTML = `<option value="">Selecciona sucursal</option>`;
 
-  // Solo activas para registrar
   const sucursalesActivas = Array.from(sucursalesMap.entries())
     .map(([id, data]) => ({ id, ...data }))
     .filter(s => s.activa === true)
@@ -116,9 +188,13 @@ function fillSucursalSelects() {
     opt.value = s.id;
     opt.textContent = s.nombre || "Sin nombre";
     sucursalSelect.appendChild(opt);
+
+    const opt2 = document.createElement("option");
+    opt2.value = s.id;
+    opt2.textContent = s.nombre || "Sin nombre";
+    editSucursal.appendChild(opt2);
   });
 
-  // En filtros: mostramos todas (activas e inactivas) para consultar historial
   const sucursalesTodas = Array.from(sucursalesMap.entries())
     .map(([id, data]) => ({ id, ...data }))
     .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
@@ -147,7 +223,6 @@ function escucharSucursales() {
 
       fillSucursalSelects();
 
-      // Si la sucursal seleccionada para registrar ya no existe o está inactiva -> limpiar
       const selId = sucursalSelect.value;
       if (selId) {
         const s = sucursalesMap.get(String(selId));
@@ -160,6 +235,10 @@ function escucharSucursales() {
     });
 }
 
+// ============================
+// MODALES
+// ============================
+
 function abrirModalEliminar(id) {
   deleteId = id;
   modalBackdrop.style.display = "flex";
@@ -170,12 +249,37 @@ function cerrarModalEliminar() {
   modalBackdrop.style.display = "none";
 }
 
+async function abrirModalEditar(g) {
+  editId = g.id;
+
+  editSucursal.value = String(g.sucursalId || "");
+  editCategoria.value = String(g.categoria || "");
+  editDescripcion.value = String(g.descripcion || "");
+  editMonto.value = String(g.totalPesos || "");
+
+  toggleEditColaboradorField();
+
+  // si es trabajadores, cargar colaboradores de esa sucursal
+  if (String(g.categoria) === "Trabajadores") {
+    await cargarColaboradoresEnSelect(editColaborador, editSucursal.value, g.colaboradorId || "");
+  } else {
+    if (editColaborador) editColaborador.value = "";
+  }
+
+  modalEditBackdrop.style.display = "flex";
+}
+
+function cerrarModalEditar() {
+  editId = null;
+  modalEditBackdrop.style.display = "none";
+}
+
 // ============================
-// FILTROS (por sucursalId)
+// FILTROS
 // ============================
 
 function getGastosFiltrados() {
-  const suc = filtroSucursal.value; // ahora es sucursalId
+  const suc = filtroSucursal.value;
   const cat = filtroCategoria.value;
   const fecha = filtroFecha.value;
 
@@ -215,7 +319,14 @@ function renderTabla() {
     const sucTxt = escapeHtml(sucNombre || "-");
 
     const catTxt = escapeHtml(g.categoria || "-");
-    const descTxt = escapeHtml(g.descripcion || "-");
+
+    // si es Trabajadores, mostramos el colaborador en la descripción para que se vea claro
+    let descFinal = g.descripcion || "-";
+    if (String(g.categoria) === "Trabajadores" && (g.colaboradorNombre || g.colaboradorId)) {
+      descFinal = `${descFinal} (Colaborador: ${g.colaboradorNombre || "Sin nombre"})`;
+    }
+
+    const descTxt = escapeHtml(descFinal);
     const total = formatNumber(g.totalPesos || 0, 2);
 
     tbodyGastos.innerHTML += `
@@ -225,7 +336,12 @@ function renderTabla() {
         <td>${catTxt}</td>
         <td>${descTxt}</td>
         <td>$${total}</td>
-        <td><button class="btn-mini" data-del="${g.id}">Eliminar</button></td>
+        <td>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn-mini" data-edit="${g.id}" style="background:rgba(31,138,76,.12);color:#1f8a4c;">Editar</button>
+            <button class="btn-mini" data-del="${g.id}">Eliminar</button>
+          </div>
+        </td>
       </tr>
     `;
   });
@@ -236,12 +352,25 @@ function renderTabla() {
       abrirModalEliminar(id);
     });
   });
+
+  document.querySelectorAll("[data-edit]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.getAttribute("data-edit");
+      const snap = await db.collection("gastos").doc(id).get();
+      if (!snap.exists) return;
+      abrirModalEditar({ id: snap.id, ...snap.data() });
+    });
+  });
 }
 
 function renderTodo() {
   renderTabla();
   renderResumen();
 }
+
+// ============================
+// BORRAR POR RANGO
+// ============================
 
 async function eliminarGastosPorRango(ini, fin) {
   const snap = await db
@@ -273,6 +402,10 @@ async function eliminarGastosPorRango(ini, fin) {
   return count;
 }
 
+// ============================
+// AUTH
+// ============================
+
 auth.onAuthStateChanged((user) => {
   if (!user) {
     window.location.href = "index.html";
@@ -283,7 +416,6 @@ auth.onAuthStateChanged((user) => {
   loading.style.display = "none";
   app.style.display = "block";
 
-  // Escuchar sucursales dinámicas
   escucharSucursales();
 
   db.collection("gastos")
@@ -295,6 +427,10 @@ auth.onAuthStateChanged((user) => {
     });
 });
 
+// ============================
+// NAV
+// ============================
+
 btnBack.addEventListener("click", () => {
   window.location.href = "panel.html";
 });
@@ -303,10 +439,22 @@ btnGoVentas.addEventListener("click", () => {
   window.location.href = "empleados2.html";
 });
 
+if (btnGoEgresos) btnGoEgresos.addEventListener("click", () => {
+  window.location.href = "egresos.html";
+});
+
+if (btnGoPagos) btnGoPagos.addEventListener("click", () => {
+  window.location.href = "pagos.html";
+});
+
 btnLogout.addEventListener("click", async () => {
   await auth.signOut();
   window.location.href = "index.html";
 });
+
+// ============================
+// EVENTOS FILTROS
+// ============================
 
 filtroSucursal.addEventListener("change", renderTodo);
 filtroCategoria.addEventListener("change", renderTodo);
@@ -317,14 +465,55 @@ btnClearFecha.addEventListener("click", () => {
   renderTodo();
 });
 
+// ============================
+// EVENTOS FORM
+// ============================
+
 descripcionInput.addEventListener("input", () => setMsg(""));
 montoInput.addEventListener("input", () => setMsg(""));
-sucursalSelect.addEventListener("change", () => setMsg(""));
-categoriaSelect.addEventListener("change", () => setMsg(""));
+
+sucursalSelect.addEventListener("change", async () => {
+  setMsg("");
+
+  // recargar colaboradores por sucursal si está en Trabajadores
+  if (categoriaSelect.value === "Trabajadores") {
+    await cargarColaboradoresEnSelect(colaboradorSelect, sucursalSelect.value);
+  }
+});
+
+categoriaSelect.addEventListener("change", async () => {
+  setMsg("");
+  toggleColaboradorField();
+
+  if (categoriaSelect.value === "Trabajadores") {
+    await cargarColaboradoresEnSelect(colaboradorSelect, sucursalSelect.value);
+  }
+});
+
+if (editSucursal) {
+  editSucursal.addEventListener("change", async () => {
+    toggleEditColaboradorField();
+    if (editCategoria.value === "Trabajadores") {
+      await cargarColaboradoresEnSelect(editColaborador, editSucursal.value);
+    }
+  });
+}
+
+if (editCategoria) {
+  editCategoria.addEventListener("change", async () => {
+    toggleEditColaboradorField();
+    if (editCategoria.value === "Trabajadores") {
+      await cargarColaboradoresEnSelect(editColaborador, editSucursal.value);
+    }
+  });
+}
+
+// ============================
+// GUARDAR GASTO
+// ============================
 
 formGasto.addEventListener("submit", async (e) => {
   e.preventDefault();
-
   setMsg("");
 
   const sucursalId = sucursalSelect.value;
@@ -339,17 +528,31 @@ formGasto.addEventListener("submit", async (e) => {
     return;
   }
 
-  // Evitar registrar en sucursal inactiva
   const sucObj = sucursalesMap.get(String(sucursalId));
   if (!sucObj || sucObj.activa !== true) {
     setMsg("Esa sucursal está inactiva. Selecciona otra.");
     return;
   }
 
+  // Si es trabajadores -> colaborador obligatorio
+  let colaboradorId = "";
+  let colaboradorNombre = "";
+
+  if (categoria === "Trabajadores") {
+    colaboradorId = colaboradorSelect?.value || "";
+    colaboradorNombre =
+      colaboradorSelect?.options[colaboradorSelect.selectedIndex]?.textContent || "";
+
+    if (!colaboradorId) {
+      setMsg("Selecciona un colaborador.");
+      return;
+    }
+  }
+
   btnGuardar.disabled = true;
 
   try {
-    await db.collection("gastos").add({
+    const payload = {
       sucursalId: String(sucursalId),
       sucursalNombre: String(sucursalNombre || ""),
       categoria,
@@ -357,18 +560,32 @@ formGasto.addEventListener("submit", async (e) => {
       totalPesos: monto,
       fechaKey: new Date().toLocaleDateString("sv-SE"),
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    };
+
+    // Guardar anticipo para pagos.html
+    if (categoria === "Trabajadores") {
+      payload.colaboradorId = String(colaboradorId);
+      payload.colaboradorNombre = String(colaboradorNombre || "");
+      payload.esAnticipo = true; // <- clave
+    }
+
+    await db.collection("gastos").add(payload);
 
     setMsg("Gasto registrado.", false);
 
     descripcionInput.value = "";
     montoInput.value = "";
+    if (colaboradorSelect) colaboradorSelect.value = "";
   } catch (error) {
     setMsg("No se pudo guardar. Intenta de nuevo.");
   } finally {
     btnGuardar.disabled = false;
   }
 });
+
+// ============================
+// ELIMINAR POR RANGO
+// ============================
 
 btnResetRango.addEventListener("click", async () => {
   const ini = fechaInicio.value;
@@ -408,6 +625,10 @@ btnResetRango.addEventListener("click", async () => {
   }
 });
 
+// ============================
+// MODAL ELIMINAR
+// ============================
+
 btnModalCancelar.addEventListener("click", () => {
   cerrarModalEliminar();
 });
@@ -431,3 +652,86 @@ btnModalEliminar.addEventListener("click", async () => {
     btnModalEliminar.disabled = false;
   }
 });
+
+// ============================
+// MODAL EDITAR
+// ============================
+
+btnEditCancelar.addEventListener("click", () => {
+  cerrarModalEditar();
+});
+
+modalEditBackdrop.addEventListener("click", (e) => {
+  if (e.target === modalEditBackdrop) cerrarModalEditar();
+});
+
+btnEditGuardar.addEventListener("click", async () => {
+  if (!editId) return;
+
+  const sucursalId = editSucursal.value;
+  const categoria = editCategoria.value;
+  const descripcion = editDescripcion.value.trim();
+  const monto = Number(editMonto.value || 0);
+
+  if (!sucursalId || !categoria || !descripcion || monto <= 0) {
+    setMsg("Completa los campos del gasto.");
+    return;
+  }
+
+  const sucObj = sucursalesMap.get(String(sucursalId));
+  if (!sucObj || sucObj.activa !== true) {
+    setMsg("Esa sucursal está inactiva. Selecciona otra.");
+    return;
+  }
+
+  // si es trabajadores -> colaborador obligatorio
+  let colaboradorId = "";
+  let colaboradorNombre = "";
+
+  if (categoria === "Trabajadores") {
+    colaboradorId = editColaborador?.value || "";
+    colaboradorNombre =
+      editColaborador?.options[editColaborador.selectedIndex]?.textContent || "";
+
+    if (!colaboradorId) {
+      setMsg("Selecciona un colaborador.");
+      return;
+    }
+  }
+
+  btnEditGuardar.disabled = true;
+
+  try {
+    const updatePayload = {
+      sucursalId: String(sucursalId),
+      sucursalNombre: String(getSucursalNombreById(sucursalId) || ""),
+      categoria,
+      descripcion,
+      totalPesos: monto,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    if (categoria === "Trabajadores") {
+      updatePayload.colaboradorId = String(colaboradorId);
+      updatePayload.colaboradorNombre = String(colaboradorNombre || "");
+      updatePayload.esAnticipo = true;
+    } else {
+      // si cambió a otra categoría, limpiamos campos de colaborador
+      updatePayload.colaboradorId = firebase.firestore.FieldValue.delete();
+      updatePayload.colaboradorNombre = firebase.firestore.FieldValue.delete();
+      updatePayload.esAnticipo = firebase.firestore.FieldValue.delete();
+    }
+
+    await db.collection("gastos").doc(editId).update(updatePayload);
+
+    cerrarModalEditar();
+    setMsg("Gasto actualizado.", false);
+  } catch (e) {
+    setMsg("No se pudo actualizar el gasto.");
+  } finally {
+    btnEditGuardar.disabled = false;
+  }
+});
+
+// init visual
+toggleColaboradorField();
