@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tortillería El Maizal | Pagos</title>
+
+  <link rel="icon" type="image/png" href="imagenes/logo1.png" />
+  <link rel="stylesheet" href="pagos.css" />
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <img src="imagenes/logo1.png" alt="Logo El Maizal">
+        <div class="title">
+          <strong>El Maizal</strong>
+          <span>Pagos (Colaboradores)</span>
+        </div>
+      </div>
+
+      <div class="userbox">
+        <div class="email" id="userEmail">Cargando...</div>
+        <button class="btn-logout" id="btnLogout">Cerrar sesión</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" id="app" style="display:none;">
+    <section class="actions-top">
+      <button class="btn-back" id="btnBack">⬅ Volver al Panel</button>
+      <button class="btn-go2" id="btnGoVentas">💰 Ventas</button>
+      <button class="btn-go2" id="btnGoGastos">🧾 Ir a Gastos</button>
+      <button class="btn-go2" id="btnGoEgresos">📦 Egresos</button>
+    </section>
+
+    <section class="card">
+      <h1>Registrar pago a colaborador</h1>
+
+      <form id="formPago" class="form">
+        <div class="field">
+          <label>Sucursal</label>
+          <select id="sucursal" required>
+            <option value="">Cargando sucursales...</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Colaborador</label>
+          <select id="colaborador" required>
+            <option value="">Selecciona sucursal primero...</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Fecha del pago</label>
+          <input type="date" id="fechaPago" required />
+        </div>
+
+        <div class="field">
+          <label>Días trabajados</label>
+          <input type="number" id="dias" min="0" step="1" placeholder="Ej. 7" required />
+        </div>
+
+        <div class="field">
+          <label>Pago por día ($)</label>
+          <input type="number" id="pagoDia" min="0" step="0.1" placeholder="Ej. 550" required />
+        </div>
+
+        <div class="field">
+          <label>Total calculado ($)</label>
+          <input type="number" id="totalCalculado" min="0" step="0.1" placeholder="0" />
+        </div>
+
+        <div class="field">
+          <label>Anticipo detectado ($)</label>
+          <input type="text" id="anticipoDetectado" readonly />
+        </div>
+
+        <div class="field">
+          <label>Pendiente a pagar ($)</label>
+          <input type="text" id="pendientePagar" readonly />
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn-primary" id="btnGuardar">Registrar pago</button>
+        </div>
+
+        <p class="msg" id="msg"></p>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Historial de pagos</h2>
+
+      <div class="filters">
+        <select id="filtroSucursal">
+          <option value="todas">Cargando sucursales...</option>
+        </select>
+
+        <input type="date" id="filtroFecha" />
+        <button class="btn-clear" id="btnClearFecha">Quitar fecha</button>
+      </div>
+
+      <div class="resumen">
+        <div class="res-card neto">
+          <span>Total pagado</span>
+          <strong id="resPagado">$0.00</strong>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Sucursal</th>
+              <th>Colaborador</th>
+              <th>Días</th>
+              <th>$ / Día</th>
+              <th>Total</th>
+              <th>Anticipo</th>
+              <th>Pendiente</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyPagos"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div class="loading" id="loading">Verificando sesión...</div>
+
+  <div class="modal-backdrop" id="modalBackdrop" style="display:none;">
+    <div class="modal">
+      <h3>Eliminar pago</h3>
+      <p>¿Seguro que deseas eliminar este pago?</p>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btnModalCancelar">Cancelar</button>
+        <button class="btn-danger" id="btnModalEliminar">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+
+  <script src="pagos.js"></script>
+</body>
+</html>

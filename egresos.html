@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tortillería El Maizal | Egresos</title>
+
+  <link rel="icon" type="image/png" href="imagenes/logo1.png" />
+  <link rel="stylesheet" href="gastos.css" />
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <img src="imagenes/logo1.png" alt="Logo El Maizal">
+        <div class="title">
+          <strong>El Maizal</strong>
+          <span>Egresos (Global)</span>
+        </div>
+      </div>
+
+      <div class="userbox">
+        <div class="email" id="userEmail">Cargando...</div>
+        <button class="btn-logout" id="btnLogout">Cerrar sesión</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" id="app" style="display:none;">
+    <section class="actions-top">
+      <button class="btn-back" id="btnBack">⬅ Volver al Panel</button>
+      <button class="btn-go2" id="btnGoVentas">💰 Ventas</button>
+      <button class="btn-go2" id="btnGoGastos">🧾 Ir a Gastos</button>
+      <button class="btn-go2" id="btnGoPagos">👷 Pagos</button>
+    </section>
+
+    <section class="card">
+      <h1>Registrar egreso global</h1>
+
+      <form id="formEgreso" class="form">
+        <div class="field">
+          <label>Fecha</label>
+          <input type="date" id="fecha" required />
+        </div>
+
+        <div class="field">
+          <label>Nota / Descripción</label>
+          <input type="text" id="nota" placeholder="Ej. Compra de insumos semanal" required />
+        </div>
+
+        <div class="field">
+          <label>Sucursales activas (se divide entre)</label>
+          <input type="text" id="sucursalesCount" readonly />
+        </div>
+
+        <div class="field">
+          <label>Total global ($)</label>
+          <input type="text" id="totalGlobal" readonly />
+        </div>
+
+        <div class="actions" style="grid-column:1/-1;">
+          <button type="submit" class="btn-primary" id="btnGuardar">Guardar egreso</button>
+        </div>
+
+        <p class="msg" id="msg"></p>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Calculadora (Maíz y Harina)</h2>
+
+      <div class="form" style="grid-template-columns:repeat(3,1fr);align-items:end;">
+        <div class="field">
+          <label>Maíz (kilos)</label>
+          <input type="number" id="maizKilos" step="0.1" min="0" placeholder="Ej. 120" />
+        </div>
+
+        <div class="field">
+          <label>Maíz ($ por kilo)</label>
+          <input type="number" id="maizPrecio" step="0.1" min="0" value="120" />
+        </div>
+
+        <div class="field">
+          <label>Maíz total ($)</label>
+          <input type="text" id="maizTotal" placeholder="Ej. 14400" />
+        </div>
+
+        <div class="field">
+          <label>Harina (kilos)</label>
+          <input type="number" id="harinaKilos" step="0.1" min="0" placeholder="Ej. 40" />
+        </div>
+
+        <div class="field">
+          <label>Harina ($ por kilo)</label>
+          <input type="number" id="harinaPrecio" step="0.1" min="0" value="369" />
+        </div>
+
+        <div class="field">
+          <label>Harina total ($)</label>
+          <input type="text" id="harinaTotal" placeholder="Ej. 14760" />
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Otros egresos</h2>
+
+      <div class="form" style="grid-template-columns:repeat(4,1fr);align-items:end;">
+        <div class="field">
+          <label>Gas ($)</label>
+          <input type="number" id="gasMonto" step="0.1" min="0" placeholder="Ej. 800" />
+        </div>
+
+        <div class="field">
+          <label>Papel ($)</label>
+          <input type="number" id="papelMonto" step="0.1" min="0" placeholder="Ej. 350" />
+        </div>
+
+        <div class="field">
+          <label>Luz ($)</label>
+          <input type="number" id="luzMonto" step="0.1" min="0" placeholder="Ej. 1200" />
+        </div>
+
+        <div class="field">
+          <label>Renta ($)</label>
+          <input type="number" id="rentaMonto" step="0.1" min="0" placeholder="Ej. 5000" />
+        </div>
+      </div>
+
+      <div style="margin-top:12px;font-weight:1000;font-size:1.05rem;">
+        Total calculado: <span id="calcTotal">$0.00</span>
+      </div>
+
+      <div style="margin-top:10px;font-weight:900;color:#555;">
+        Se dividirá en: <span id="divisionTxt">$0.00</span> por sucursal activa
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Historial (últimos 30)</h2>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Nota</th>
+              <th>Total global</th>
+              <th>Sucursales</th>
+              <th>División</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyEgresos"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div class="loading" id="loading">Verificando sesión...</div>
+
+  <div class="modal-backdrop" id="modalBackdrop" style="display:none;">
+    <div class="modal">
+      <h3>Eliminar egreso</h3>
+      <p>Esto eliminará el egreso global y los gastos divididos que creó.</p>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btnModalCancelar">Cancelar</button>
+        <button class="btn-danger" id="btnModalEliminar">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+
+  <script src="egresos.js"></script>
+</body>
+</html>
