@@ -20,6 +20,8 @@ const userEmail = document.getElementById("userEmail");
 const btnBack = document.getElementById("btnBack");
 const btnLogout = document.getElementById("btnLogout");
 const btnGoGastos = document.getElementById("btnGoGastos");
+const btnGoEgresos = document.getElementById("btnGoEgresos");
+const btnGoPagos = document.getElementById("btnGoPagos");
 
 const formVenta = document.getElementById("formVenta");
 const sucursalSelect = document.getElementById("sucursal");
@@ -57,8 +59,9 @@ let ventasCache = [];
 let gastosCache = [];
 let msgTimer = null;
 
-// Cache de sucursales: { id -> {nombre, activa} }
 let sucursalesMap = new Map();
+
+let lastEditedField = null;
 
 function setMsg(text = "", isError = true, autoClear = true) {
   msg.style.color = isError ? "#b00020" : "#1f8a4c";
@@ -87,12 +90,6 @@ function formatNumber(n, decimals = 1) {
   });
 }
 
-function calcTotal() {
-  const kilos = Number(kilosInput.value || 0);
-  const precio = Number(precioKiloInput.value || 0);
-  totalPesosInput.value = formatMoney(kilos * precio);
-}
-
 function escapeHtml(text) {
   return String(text)
     .replaceAll("&", "&amp;")
@@ -102,9 +99,39 @@ function escapeHtml(text) {
     .replaceAll("'", "&#039;");
 }
 
-// ============================
-// SUCURSALES DINAMICAS
-// ============================
+function calcFromKilos() {
+  const kilos = Number(kilosInput.value || 0);
+  const precio = Number(precioKiloInput.value || 0);
+
+  if (!kilos || !precio) {
+    totalPesosInput.value = "";
+    return;
+  }
+
+  const total = kilos * precio;
+  totalPesosInput.value = Number(total.toFixed(2));
+}
+
+function calcFromTotal() {
+  const total = Number(totalPesosInput.value || 0);
+  const precio = Number(precioKiloInput.value || 0);
+
+  if (!total || !precio) {
+    kilosInput.value = "";
+    return;
+  }
+
+  const kilos = total / precio;
+  kilosInput.value = Number(kilos.toFixed(1));
+}
+
+function syncCalc() {
+  if (lastEditedField === "total") {
+    calcFromTotal();
+  } else {
+    calcFromKilos();
+  }
+}
 
 function getSucursalNombreById(id) {
   if (!id) return "-";
@@ -113,13 +140,9 @@ function getSucursalNombreById(id) {
 }
 
 function fillSucursalSelects() {
-  // Select de registrar venta
   sucursalSelect.innerHTML = `<option value="">Selecciona sucursal</option>`;
-
-  // Select de filtro
   filtroSucursal.innerHTML = `<option value="todas">Todas</option>`;
 
-  // Solo activas para registrar
   const sucursalesActivas = Array.from(sucursalesMap.entries())
     .map(([id, data]) => ({ id, ...data }))
     .filter(s => s.activa === true)
@@ -132,7 +155,6 @@ function fillSucursalSelects() {
     sucursalSelect.appendChild(opt);
   });
 
-  // En filtros: mostramos todas (activas e inactivas) para consultar historial
   const sucursalesTodas = Array.from(sucursalesMap.entries())
     .map(([id, data]) => ({ id, ...data }))
     .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
@@ -159,10 +181,8 @@ function escucharSucursales() {
         });
       });
 
-      // Rellenar selects
       fillSucursalSelects();
 
-      // Si la sucursal seleccionada para registrar ya no existe o está inactiva -> limpiar
       const selId = sucursalSelect.value;
       if (selId) {
         const s = sucursalesMap.get(String(selId));
@@ -175,10 +195,6 @@ function escucharSucursales() {
       renderTodo();
     });
 }
-
-// ============================
-// EMPLEADOS POR SUCURSAL (ID)
-// ============================
 
 async function cargarEmpleadosPorSucursalId(sucursalId) {
   empleadoSelect.innerHTML = `<option value="">Selecciona empleado</option>`;
@@ -208,12 +224,8 @@ function cerrarModalEliminar() {
   modalBackdrop.style.display = "none";
 }
 
-// ============================
-// FILTROS (por sucursalId)
-// ============================
-
 function getVentasFiltradas() {
-  const suc = filtroSucursal.value; // ahora es sucursalId
+  const suc = filtroSucursal.value;
   const tipo = filtroTipo.value;
   const fecha = filtroFecha.value;
 
@@ -235,7 +247,7 @@ function getVentasFiltradas() {
 }
 
 function getGastosFiltrados() {
-  const suc = filtroSucursal.value; // ahora es sucursalId
+  const suc = filtroSucursal.value;
   const fecha = filtroFecha.value;
 
   let lista = [...gastosCache];
@@ -255,8 +267,10 @@ function renderResumen() {
   const ventasFiltradas = getVentasFiltradas();
   const gastosFiltrados = getGastosFiltrados();
 
-  const totalKilos = ventasFiltradas.reduce((acc, v) => acc + Number(v.kilos || 0), 0);
-  const totalVentas = ventasFiltradas.reduce((acc, v) => acc + Number(v.totalPesos || 0), 0);
+  const ventasPagadas = ventasFiltradas.filter(v => v.pagado === true);
+
+  const totalKilos = ventasPagadas.reduce((acc, v) => acc + Number(v.kilos || 0), 0);
+  const totalVentas = ventasPagadas.reduce((acc, v) => acc + Number(v.totalPesos || 0), 0);
   const totalGastos = gastosFiltrados.reduce((acc, g) => acc + Number(g.totalPesos || 0), 0);
   const neto = totalVentas - totalGastos;
 
@@ -287,6 +301,8 @@ function renderTabla() {
     const precio = formatNumber(v.precioKilo || 0, 2);
     const total = formatNumber(v.totalPesos || 0, 2);
 
+    const pagado = v.pagado === true;
+
     tbodyVentas.innerHTML += `
       <tr>
         <td>${escapeHtml(fechaTxt)}</td>
@@ -296,7 +312,14 @@ function renderTabla() {
         <td>${kilos}</td>
         <td>$${precio}</td>
         <td>$${total}</td>
-        <td><button class="btn-mini" data-del="${v.id}">Eliminar</button></td>
+        <td>
+          <button class="btn-mini ${pagado ? "btn-paid" : "btn-unpaid"}" data-pay="${v.id}">
+            ${pagado ? "Pagado" : "No pagado"}
+          </button>
+        </td>
+        <td>
+          <button class="btn-mini" data-del="${v.id}">Eliminar</button>
+        </td>
       </tr>
     `;
   });
@@ -305,6 +328,25 @@ function renderTabla() {
     btn.addEventListener("click", () => {
       const id = btn.getAttribute("data-del");
       abrirModalEliminar(id);
+    });
+  });
+
+  document.querySelectorAll("[data-pay]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.getAttribute("data-pay");
+      const venta = ventasCache.find(x => x.id === id);
+      if (!venta) return;
+
+      const nuevoEstado = !(venta.pagado === true);
+
+      try {
+        await db.collection("ventas").doc(id).update({
+          pagado: nuevoEstado,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      } catch (e) {
+        setMsg("No se pudo actualizar el pago.");
+      }
     });
   });
 }
@@ -354,7 +396,6 @@ auth.onAuthStateChanged((user) => {
   loading.style.display = "none";
   app.style.display = "block";
 
-  // Escuchar sucursales dinámicas
   escucharSucursales();
 
   db.collection("ventas")
@@ -380,6 +421,14 @@ btnBack.addEventListener("click", () => {
 
 btnGoGastos.addEventListener("click", () => {
   window.location.href = "gastos.html";
+});
+
+if (btnGoEgresos) btnGoEgresos.addEventListener("click", () => {
+  window.location.href = "egresos.html";
+});
+
+if (btnGoPagos) btnGoPagos.addEventListener("click", () => {
+  window.location.href = "pagos.html";
 });
 
 btnLogout.addEventListener("click", async () => {
@@ -409,12 +458,19 @@ tipoVentaSelect.addEventListener("change", async () => {
 
 kilosInput.addEventListener("input", () => {
   setMsg("");
-  calcTotal();
+  lastEditedField = "kilos";
+  syncCalc();
 });
 
 precioKiloInput.addEventListener("input", () => {
   setMsg("");
-  calcTotal();
+  syncCalc();
+});
+
+totalPesosInput.addEventListener("input", () => {
+  setMsg("");
+  lastEditedField = "total";
+  syncCalc();
 });
 
 empleadoSelect.addEventListener("change", () => setMsg(""));
@@ -437,16 +493,16 @@ formVenta.addEventListener("submit", async (e) => {
   const sucursalNombre = getSucursalNombreById(sucursalId);
 
   const tipoVenta = tipoVentaSelect.value;
+
   const kilos = Number(kilosInput.value || 0);
   const precioKilo = Number(precioKiloInput.value || 0);
-  const totalPesos = kilos * precioKilo;
+  const totalPesos = Number((kilos * precioKilo).toFixed(2));
 
   if (!sucursalId || !tipoVenta) {
     setMsg("Completa todos los campos.");
     return;
   }
 
-  // Evitar registrar en sucursal inactiva
   const sucObj = sucursalesMap.get(String(sucursalId));
   if (!sucObj || sucObj.activa !== true) {
     setMsg("Esa sucursal está inactiva. Selecciona otra.");
@@ -491,14 +547,16 @@ formVenta.addEventListener("submit", async (e) => {
       kilos,
       precioKilo,
       totalPesos,
+      pagado: false,
       fechaKey: new Date().toLocaleDateString("sv-SE"),
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 
-    setMsg("Venta registrada.", false);
+    setMsg("Venta registrada (No pagado).", false);
 
     kilosInput.value = "";
-    calcTotal();
+    totalPesosInput.value = "";
+    lastEditedField = null;
   } catch (error) {
     setMsg("No se pudo guardar. Intenta de nuevo.");
   } finally {
@@ -564,4 +622,5 @@ btnModalEliminar.addEventListener("click", async () => {
   }
 });
 
-calcTotal();
+lastEditedField = "kilos";
+syncCalc();
