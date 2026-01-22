@@ -34,6 +34,8 @@ const btnExcel = document.getElementById("btnExcel");
 
 let ventasCache = [];
 let gastosCache = [];
+let egresosCache = [];
+let pagosCache = [];
 
 // Cache sucursales
 let sucursalesMap = new Map(); // id -> {nombre, activa}
@@ -76,6 +78,13 @@ function getSucursalNombreById(id) {
   return s?.nombre || "-";
 }
 
+function getSucursalesActivasIds() {
+  return Array.from(sucursalesMap.entries())
+    .map(([id, data]) => ({ id, ...data }))
+    .filter(s => s.activa === true)
+    .map(s => String(s.id));
+}
+
 function fillFiltroSucursal() {
   filtroSucursal.innerHTML = `<option value="todas">Todas</option>`;
 
@@ -112,28 +121,128 @@ function escucharSucursales() {
 }
 
 // ============================
+// UTIL: ventas pagadas
+// ============================
+
+function isVentaPagada(v) {
+  // soporte por si guardaste como "pagado" o "isPaid"
+  if (typeof v.pagado === "boolean") return v.pagado === true;
+  if (typeof v.isPaid === "boolean") return v.isPaid === true;
+
+  // si no existe el campo, asumimos pagado para no romper reportes viejos
+  return true;
+}
+
+// ============================
 // FILTROS (por sucursalId)
 // ============================
 
 function getFiltrados() {
-  const suc = filtroSucursal.value; // ahora es sucursalId
+  const suc = filtroSucursal.value; // sucursalId
   const fecha = filtroFecha.value;
 
-  let ventas = [...ventasCache];
+  // 1) Ventas: SOLO pagadas
+  let ventas = [...ventasCache].filter(isVentaPagada);
+
+  // 2) Gastos normales
   let gastos = [...gastosCache];
+
+  // 3) Pagos (gasto por sucursal)
+  let pagos = [...pagosCache];
+
+  // 4) Egresos globales (se reparten)
+  let egresos = [...egresosCache];
 
   if (suc !== "todas") {
     ventas = ventas.filter(v => String(v.sucursalId || "") === String(suc));
     gastos = gastos.filter(g => String(g.sucursalId || "") === String(suc));
+    pagos = pagos.filter(p => String(p.sucursalId || "") === String(suc));
+    // egresos se filtra por fecha, pero reparto se hace después
   }
 
   if (fecha) {
     ventas = ventas.filter(v => String(v.fechaKey || "") === String(fecha));
     gastos = gastos.filter(g => String(g.fechaKey || "") === String(fecha));
+    pagos = pagos.filter(p => String(p.fechaKey || "") === String(fecha));
+    egresos = egresos.filter(e => String(e.fechaKey || "") === String(fecha));
   }
 
-  return { ventas, gastos };
+  // Egresos: convertirlos en "gastos" repartidos
+  const egresosComoGastos = repartirEgresos(egresos, suc);
+
+  // Pagos: convertirlos en "gastos"
+  const pagosComoGastos = pagos.map((p) => ({
+    id: p.id,
+    fechaKey: p.fechaKey || (p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString("sv-SE") : ""),
+    sucursalId: String(p.sucursalId || ""),
+    sucursalNombre: p.sucursalNombre || getSucursalNombreById(p.sucursalId),
+    categoria: "Trabajadores",
+    descripcion: p.descripcion || p.colaboradorNombre || "Pago colaborador",
+    totalPesos: Number(p.totalPagar ?? p.totalPesos ?? p.monto ?? 0),
+    createdAt: p.createdAt || null,
+    _tipoExtra: "pago"
+  }));
+
+  // Gastos final = gastos normales + egresos + pagos
+  const gastosFinal = [...gastos, ...egresosComoGastos, ...pagosComoGastos];
+
+  return { ventas, gastos: gastosFinal };
 }
+
+// ============================
+// EGRESOS repartidos
+// ============================
+
+function repartirEgresos(egresos, sucFiltro) {
+  const sucursalesActivas = getSucursalesActivasIds();
+  const totalSucursales = sucursalesActivas.length || 1;
+
+  const lista = [];
+
+  egresos.forEach((e) => {
+    const total = Number(e.totalPesos ?? e.monto ?? 0);
+    if (total <= 0) return;
+
+    const fechaKey = e.fechaKey || (e.createdAt?.toDate ? e.createdAt.toDate().toLocaleDateString("sv-SE") : "");
+
+    // si filtras por una sucursal, solo se agrega su parte
+    if (sucFiltro !== "todas") {
+      lista.push({
+        id: e.id,
+        fechaKey,
+        sucursalId: String(sucFiltro),
+        sucursalNombre: getSucursalNombreById(sucFiltro),
+        categoria: "EGRESO GLOBAL",
+        descripcion: e.descripcion || e.concepto || "Egreso global",
+        totalPesos: total / totalSucursales,
+        createdAt: e.createdAt || null,
+        _tipoExtra: "egreso"
+      });
+      return;
+    }
+
+    // si es todas, se reparte a cada sucursal activa
+    sucursalesActivas.forEach((sid) => {
+      lista.push({
+        id: e.id,
+        fechaKey,
+        sucursalId: String(sid),
+        sucursalNombre: getSucursalNombreById(sid),
+        categoria: "EGRESO GLOBAL",
+        descripcion: e.descripcion || e.concepto || "Egreso global",
+        totalPesos: total / totalSucursales,
+        createdAt: e.createdAt || null,
+        _tipoExtra: "egreso"
+      });
+    });
+  });
+
+  return lista;
+}
+
+// ============================
+// AGRUPADORES
+// ============================
 
 function agruparPorFecha(lista) {
   const map = {};
@@ -148,6 +257,10 @@ function agruparPorFecha(lista) {
 function ordenarFechasAsc(keys) {
   return keys.sort((a, b) => (a > b ? 1 : -1));
 }
+
+// ============================
+// RENDER
+// ============================
 
 function renderResumen(ventas, gastos) {
   const totalVentas = ventas.reduce((acc, v) => acc + Number(v.totalPesos || 0), 0);
@@ -197,7 +310,6 @@ function renderTablasPorFecha(ventas, gastos) {
       const precio = formatNumber(v.precioKilo || 0, 2);
       const total = formatNumber(v.totalPesos || 0, 2);
 
-      // nombre real de sucursal
       const sucNombre = v.sucursalNombre || getSucursalNombreById(v.sucursalId);
       const suc = escapeHtml(sucNombre || "-");
 
@@ -214,7 +326,6 @@ function renderTablasPorFecha(ventas, gastos) {
     }).join("");
 
     const gastosRows = gList.map((g) => {
-      // nombre real de sucursal
       const sucNombre = g.sucursalNombre || getSucursalNombreById(g.sucursalId);
       const suc = escapeHtml(sucNombre || "-");
 
@@ -248,7 +359,7 @@ function renderTablasPorFecha(ventas, gastos) {
           <table>
             <thead>
               <tr>
-                <th colspan="6">Ventas</th>
+                <th colspan="6">Ventas (solo pagadas)</th>
               </tr>
               <tr>
                 <th>Sucursal</th>
@@ -269,7 +380,7 @@ function renderTablasPorFecha(ventas, gastos) {
           <table>
             <thead>
               <tr>
-                <th colspan="4">Gastos</th>
+                <th colspan="4">Gastos (incluye egresos + pagos)</th>
               </tr>
               <tr>
                 <th>Sucursal</th>
@@ -295,8 +406,21 @@ function renderTodo() {
 }
 
 // ============================
-// EXCEL (con sucursalNombre)
+// EXCEL PRO
 // ============================
+
+function autoFitColumns(ws, rows) {
+  // calcula ancho por contenido
+  const colWidths = [];
+  rows.forEach((r) => {
+    r.forEach((cell, i) => {
+      const val = cell == null ? "" : String(cell);
+      const len = val.length;
+      colWidths[i] = Math.max(colWidths[i] || 10, Math.min(40, len + 2));
+    });
+  });
+  ws["!cols"] = colWidths.map(w => ({ wch: w }));
+}
 
 function descargarExcelXLSX(ventas, gastos) {
   const map = {};
@@ -316,6 +440,42 @@ function descargarExcelXLSX(ventas, gastos) {
   const fechas = ordenarFechasAsc(Object.keys(map));
   const wb = XLSX.utils.book_new();
 
+  // Hoja RESUMEN general
+  const resumenRows = [];
+  resumenRows.push(["REPORTE EL MAIZAL"]);
+  resumenRows.push(["Generado", new Date().toLocaleString("es-MX")]);
+  resumenRows.push([]);
+  resumenRows.push(["Fecha", "Kilos", "Ventas", "Gastos", "Neto"]);
+
+  fechas.forEach((fechaKey) => {
+    const vList = map[fechaKey].ventas || [];
+    const gList = map[fechaKey].gastos || [];
+
+    const totalKilos = vList.reduce((acc, x) => acc + Number(x.kilos || 0), 0);
+    const totalV = vList.reduce((acc, x) => acc + Number(x.totalPesos || 0), 0);
+    const totalG = gList.reduce((acc, x) => acc + Number(x.totalPesos || 0), 0);
+    const neto = totalV - totalG;
+
+    resumenRows.push([
+      fechaKey,
+      totalKilos,
+      totalV,
+      totalG,
+      neto
+    ]);
+  });
+
+  resumenRows.push([]);
+  const totalVentasAll = ventas.reduce((acc, x) => acc + Number(x.totalPesos || 0), 0);
+  const totalGastosAll = gastos.reduce((acc, x) => acc + Number(x.totalPesos || 0), 0);
+  const totalKilosAll = ventas.reduce((acc, x) => acc + Number(x.kilos || 0), 0);
+  resumenRows.push(["TOTALES", totalKilosAll, totalVentasAll, totalGastosAll, totalVentasAll - totalGastosAll]);
+
+  const wsResumen = XLSX.utils.aoa_to_sheet(resumenRows);
+  autoFitColumns(wsResumen, resumenRows);
+  XLSX.utils.book_append_sheet(wb, wsResumen, "RESUMEN");
+
+  // Hojas por fecha
   fechas.forEach((fechaKey) => {
     const vList = map[fechaKey].ventas || [];
     const gList = map[fechaKey].gastos || [];
@@ -328,9 +488,11 @@ function descargarExcelXLSX(ventas, gastos) {
     const rows = [];
 
     rows.push(["FECHA", fechaKey]);
+    rows.push(["(Ventas solo pagadas)"]);
     rows.push([]);
+
     rows.push(["VENTAS"]);
-    rows.push(["Sucursal", "Tipo", "Empleado", "Kilos", "PrecioKilo", "Total"]);
+    rows.push(["Sucursal", "Tipo", "Empleado", "Kilos", "Precio/Kilo", "Total"]);
 
     vList.forEach((v) => {
       const sucNombre = v.sucursalNombre || getSucursalNombreById(v.sucursalId);
@@ -346,7 +508,7 @@ function descargarExcelXLSX(ventas, gastos) {
     });
 
     rows.push([]);
-    rows.push(["GASTOS"]);
+    rows.push(["GASTOS (incluye egresos + pagos)"]);
     rows.push(["Sucursal", "Categoria", "Descripcion", "Total"]);
 
     gList.forEach((g) => {
@@ -362,12 +524,13 @@ function descargarExcelXLSX(ventas, gastos) {
 
     rows.push([]);
     rows.push(["RESUMEN"]);
-    rows.push(["TotalKilos", totalKilos]);
-    rows.push(["TotalVentas", totalV]);
-    rows.push(["TotalGastos", totalG]);
+    rows.push(["Total Kilos", totalKilos]);
+    rows.push(["Total Ventas", totalV]);
+    rows.push(["Total Gastos", totalG]);
     rows.push(["Neto", neto]);
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
+    autoFitColumns(ws, rows);
 
     let sheetName = String(fechaKey);
     sheetName = sheetName.substring(0, 31);
@@ -397,7 +560,7 @@ auth.onAuthStateChanged((user) => {
 
   db.collection("ventas")
     .orderBy("createdAt", "desc")
-    .limit(1000)
+    .limit(1500)
     .onSnapshot((snapshot) => {
       ventasCache = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       renderTodo();
@@ -405,9 +568,27 @@ auth.onAuthStateChanged((user) => {
 
   db.collection("gastos")
     .orderBy("createdAt", "desc")
-    .limit(1000)
+    .limit(1500)
     .onSnapshot((snapshot) => {
       gastosCache = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      renderTodo();
+    });
+
+  // NUEVO: egresos globales
+  db.collection("egresos")
+    .orderBy("createdAt", "desc")
+    .limit(1500)
+    .onSnapshot((snapshot) => {
+      egresosCache = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      renderTodo();
+    });
+
+  // NUEVO: pagos colaboradores
+  db.collection("pagos")
+    .orderBy("createdAt", "desc")
+    .limit(1500)
+    .onSnapshot((snapshot) => {
+      pagosCache = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       renderTodo();
     });
 });
