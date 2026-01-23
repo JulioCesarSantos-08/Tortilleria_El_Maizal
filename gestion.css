@@ -371,3 +371,13 @@ tbody td{
   color: var(--white);
   background: var(--danger);
 }
+
+.btn-historial{
+  border:none;
+  cursor:pointer;
+  padding:10px 14px;
+  border-radius:14px;
+  font-weight:900;
+  background: rgba(242,201,76,.22);
+  color:#111;
+}
