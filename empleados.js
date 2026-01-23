@@ -30,8 +30,6 @@ const btnGuardar = document.getElementById("btnGuardar");
 const btnCancelar = document.getElementById("btnCancelar");
 const btnBorrarTodos = document.getElementById("btnBorrarTodos");
 
-// 🔥 ahora ya NO usaremos tbody1/tbody2/tbody3 fijos
-// vamos a generar tablas dinámicas en un contenedor:
 const tablasWrap = document.getElementById("tablasWrap");
 
 const modalBackdrop = document.getElementById("modalBackdrop");
@@ -41,11 +39,9 @@ const btnModalEliminar = document.getElementById("btnModalEliminar");
 let editId = null;
 let deleteId = null;
 
-// Cache
 let empleadosDocs = [];
-let sucursalesMap = new Map(); // id -> {nombre, activa}
+let sucursalesMap = new Map();
 
-// mensajes
 let msgTimer = null;
 
 function setMsg(text = "", isError = true, autoClearMs = 2500) {
@@ -70,6 +66,24 @@ function escapeHtml(text) {
     .replaceAll("'", "&#039;");
 }
 
+function getFechaKeyHoy() {
+  return new Date().toLocaleDateString("sv-SE");
+}
+
+async function addLog({ accion, detalle }) {
+  try {
+    const user = auth.currentUser;
+    await db.collection("logs").add({
+      modulo: "empleados",
+      accion: String(accion || ""),
+      detalle: String(detalle || ""),
+      userEmail: String(user?.email || ""),
+      fechaKey: getFechaKeyHoy(),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (e) {}
+}
+
 function limpiarForm() {
   editId = null;
   nombreInput.value = "";
@@ -89,10 +103,6 @@ function cerrarModalEliminar() {
   modalBackdrop.style.display = "none";
 }
 
-// ============================
-// SUCURSALES DINAMICAS
-// ============================
-
 function getSucursalNombreById(id) {
   if (!id) return "Sin sucursal";
   const s = sucursalesMap.get(String(id));
@@ -100,7 +110,6 @@ function getSucursalNombreById(id) {
 }
 
 function fillSucursalSelect() {
-  // Solo activas para registrar
   sucursalSelect.innerHTML = `<option value="">Selecciona sucursal</option>`;
 
   const sucursalesActivas = Array.from(sucursalesMap.entries())
@@ -135,10 +144,6 @@ function escucharSucursales() {
     });
 }
 
-// ============================
-// RENDER DINAMICO
-// ============================
-
 function renderRow(doc) {
   const data = doc.data();
   const nombre = escapeHtml(data.nombre || "");
@@ -162,8 +167,7 @@ function renderRow(doc) {
 function renderTablasDinamicas() {
   if (!tablasWrap) return;
 
-  // Agrupar empleados por sucursalId
-  const grupos = new Map(); // sucursalId -> [docs]
+  const grupos = new Map();
 
   empleadosDocs.forEach((doc) => {
     const data = doc.data() || {};
@@ -173,12 +177,10 @@ function renderTablasDinamicas() {
     grupos.get(sucId).push(doc);
   });
 
-  // Orden de sucursales: primero las que existen en sucursalesMap por nombre
   const sucursalesOrdenadas = Array.from(sucursalesMap.entries())
     .map(([id, data]) => ({ id, ...data }))
     .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
 
-  // También incluir sucursales "fantasma" (eliminadas) si hay empleados ahí
   const idsEnEmpleados = Array.from(grupos.keys()).filter(id => id && !sucursalesMap.has(id));
   const sucursalesEliminadas = idsEnEmpleados.map(id => ({
     id,
@@ -188,7 +190,6 @@ function renderTablasDinamicas() {
 
   const todas = [...sucursalesOrdenadas, ...sucursalesEliminadas];
 
-  // Render
   tablasWrap.innerHTML = "";
 
   if (todas.length === 0) {
@@ -246,14 +247,12 @@ function attachActions() {
       nombreInput.value = data.nombre || "";
       rolSelect.value = data.rol || "";
 
-      // Seleccionar sucursal (solo si está activa en el select)
       const sucId = String(data.sucursalId || "");
       const existsOption = Array.from(sucursalSelect.options).some(o => String(o.value) === sucId);
 
       if (existsOption) {
         sucursalSelect.value = sucId;
       } else {
-        // si la sucursal está inactiva o eliminada, lo dejamos vacío
         sucursalSelect.value = "";
       }
 
@@ -271,10 +270,6 @@ function attachActions() {
     });
   });
 }
-
-// ============================
-// AUTH + LISTENERS
-// ============================
 
 auth.onAuthStateChanged((user) => {
   if (!user) {
@@ -324,7 +319,6 @@ formEmpleado.addEventListener("submit", async (e) => {
     return;
   }
 
-  // Evitar registrar en sucursal inactiva
   const sucObj = sucursalesMap.get(String(sucursalId));
   if (!sucObj || sucObj.activa !== true) {
     setMsg("Esa sucursal está inactiva. Selecciona otra.");
@@ -337,6 +331,9 @@ formEmpleado.addEventListener("submit", async (e) => {
 
   try {
     if (editId) {
+      const beforeSnap = await db.collection("empleados").doc(editId).get();
+      const before = beforeSnap.exists ? (beforeSnap.data() || {}) : null;
+
       await db.collection("empleados").doc(editId).update({
         nombre,
         rol,
@@ -344,15 +341,37 @@ formEmpleado.addEventListener("submit", async (e) => {
         sucursalNombre: String(sucursalNombre)
       });
 
+      let detalle = `Actualizó empleado: ${nombre} (${rol}) en ${sucursalNombre || "-"}`;
+
+      if (before) {
+        const cambios = [];
+        const bNombre = before.nombre || "";
+        const bRol = before.rol || "";
+        const bSuc = before.sucursalNombre || getSucursalNombreById(before.sucursalId);
+
+        if (String(bNombre) !== String(nombre)) cambios.push(`Nombre: "${bNombre}" → "${nombre}"`);
+        if (String(bRol) !== String(rol)) cambios.push(`Rol: "${bRol}" → "${rol}"`);
+        if (String(bSuc || "") !== String(sucursalNombre || "")) cambios.push(`Sucursal: "${bSuc || "-"}" → "${sucursalNombre}"`);
+
+        if (cambios.length) detalle += ` | Cambios: ${cambios.join(" | ")}`;
+      }
+
+      await addLog({ accion: "editar", detalle });
+
       setMsg("Empleado actualizado.", false);
       limpiarForm();
     } else {
-      await db.collection("empleados").add({
+      const docRef = await db.collection("empleados").add({
         nombre,
         rol,
         sucursalId: String(sucursalId),
         sucursalNombre: String(sucursalNombre),
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      await addLog({
+        accion: "crear",
+        detalle: `Registró empleado: ${nombre} (${rol}) en ${sucursalNombre || "-"}`
       });
 
       setMsg("Empleado registrado.", false);
@@ -378,11 +397,16 @@ btnBorrarTodos.addEventListener("click", async () => {
       return;
     }
 
-    // OJO: batch máximo 500, pero aquí normalmente son pocos.
-    // Si quieres lo hacemos por chunks luego.
+    const total = snap.size;
+
     const batch = db.batch();
     snap.docs.forEach((doc) => batch.delete(doc.ref));
     await batch.commit();
+
+    await addLog({
+      accion: "eliminar",
+      detalle: `Eliminó TODOS los empleados. Total eliminados: ${total}.`
+    });
 
     limpiarForm();
     setMsg("Todos los empleados fueron eliminados.", false);
@@ -407,8 +431,30 @@ btnModalEliminar.addEventListener("click", async () => {
   btnModalEliminar.disabled = true;
 
   try {
+    let before = null;
+    try {
+      const snap = await db.collection("empleados").doc(deleteId).get();
+      if (snap.exists) before = snap.data() || null;
+    } catch (e) {}
+
     await db.collection("empleados").doc(deleteId).delete();
     cerrarModalEliminar();
+
+    if (before) {
+      const nombre = before.nombre || "-";
+      const rol = before.rol || "-";
+      const suc = before.sucursalNombre || getSucursalNombreById(before.sucursalId);
+      await addLog({
+        accion: "eliminar",
+        detalle: `Eliminó empleado: ${nombre} (${rol}) de ${suc || "-"}`
+      });
+    } else {
+      await addLog({
+        accion: "eliminar",
+        detalle: `Eliminó un empleado (ID: ${deleteId}).`
+      });
+    }
+
     setMsg("Empleado eliminado.", false);
   } catch (error) {
     setMsg("No se pudo eliminar. Intenta de nuevo.");
