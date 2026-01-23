@@ -25,6 +25,7 @@ const formEmpleado = document.getElementById("formEmpleado");
 const nombreInput = document.getElementById("nombre");
 const sucursalSelect = document.getElementById("sucursal");
 const rolSelect = document.getElementById("rol");
+const sueldoSemanalInput = document.getElementById("sueldoSemanal");
 const msg = document.getElementById("msg");
 const btnGuardar = document.getElementById("btnGuardar");
 const btnCancelar = document.getElementById("btnCancelar");
@@ -89,6 +90,7 @@ function limpiarForm() {
   nombreInput.value = "";
   sucursalSelect.value = "";
   rolSelect.value = "";
+  sueldoSemanalInput.value = "";
   btnCancelar.style.display = "none";
   btnGuardar.textContent = "Guardar";
 }
@@ -145,15 +147,17 @@ function escucharSucursales() {
 }
 
 function renderRow(doc) {
-  const data = doc.data();
+  const data = doc.data() || {};
   const nombre = escapeHtml(data.nombre || "");
   const rol = escapeHtml(data.rol || "");
+  const sueldo = Number(data.sueldoSemanal || 0);
   const id = doc.id;
 
   return `
     <tr>
       <td>${nombre}</td>
       <td>${rol}</td>
+      <td>$${sueldo.toLocaleString("es-MX")}</td>
       <td>
         <div class="row-actions">
           <button class="btn-mini btn-edit" data-edit="${id}">Editar</button>
@@ -168,10 +172,17 @@ function renderTablasDinamicas() {
   if (!tablasWrap) return;
 
   const grupos = new Map();
+  const sinSucursal = [];
 
   empleadosDocs.forEach((doc) => {
     const data = doc.data() || {};
+    const rol = String(data.rol || "");
     const sucId = String(data.sucursalId || "");
+
+    if (rol === "Empleado") {
+      sinSucursal.push(doc);
+      return;
+    }
 
     if (!grupos.has(sucId)) grupos.set(sucId, []);
     grupos.get(sucId).push(doc);
@@ -192,8 +203,40 @@ function renderTablasDinamicas() {
 
   tablasWrap.innerHTML = "";
 
+  if (sinSucursal.length) {
+    let rows = "";
+    sinSucursal.forEach((doc) => {
+      rows += renderRow(doc);
+    });
+
+    const tablaHtml = `
+      <section class="card">
+        <h2>Empleados (Sin sucursal)</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Rol</th>
+                <th>Sueldo semanal</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows || `<tr><td colspan="4" style="padding:12px;color:#555;font-weight:800;">Sin empleados</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+
+    tablasWrap.innerHTML += tablaHtml;
+  }
+
   if (todas.length === 0) {
-    tablasWrap.innerHTML = `<p style="margin-top:10px;font-weight:800;color:#555;">No hay sucursales registradas.</p>`;
+    tablasWrap.innerHTML += `<p style="margin-top:10px;font-weight:800;color:#555;">No hay sucursales registradas.</p>`;
+    attachActions();
     return;
   }
 
@@ -217,11 +260,12 @@ function renderTablasDinamicas() {
               <tr>
                 <th>Nombre</th>
                 <th>Rol</th>
+                <th>Sueldo semanal</th>
                 <th>Acción</th>
               </tr>
             </thead>
             <tbody>
-              ${rows || `<tr><td colspan="3" style="padding:12px;color:#555;font-weight:800;">Sin empleados</td></tr>`}
+              ${rows || `<tr><td colspan="4" style="padding:12px;color:#555;font-weight:800;">Sin empleados</td></tr>`}
             </tbody>
           </table>
         </div>
@@ -246,14 +290,20 @@ function attachActions() {
 
       nombreInput.value = data.nombre || "";
       rolSelect.value = data.rol || "";
+      sueldoSemanalInput.value = String(data.sueldoSemanal ?? "");
 
+      const rol = String(data.rol || "");
       const sucId = String(data.sucursalId || "");
       const existsOption = Array.from(sucursalSelect.options).some(o => String(o.value) === sucId);
 
-      if (existsOption) {
-        sucursalSelect.value = sucId;
-      } else {
+      if (rol === "Empleado") {
         sucursalSelect.value = "";
+      } else {
+        if (existsOption) {
+          sucursalSelect.value = sucId;
+        } else {
+          sucursalSelect.value = "";
+        }
       }
 
       btnCancelar.style.display = "inline-block";
@@ -311,21 +361,36 @@ formEmpleado.addEventListener("submit", async (e) => {
   setMsg("");
 
   const nombre = nombreInput.value.trim();
-  const sucursalId = sucursalSelect.value;
   const rol = rolSelect.value;
+  const sueldoSemanal = Number(sueldoSemanalInput.value);
 
-  if (!nombre || !sucursalId || !rol) {
-    setMsg("Completa todos los campos.");
+  let sucursalId = sucursalSelect.value;
+
+  if (!nombre || !rol || !Number.isFinite(sueldoSemanal) || sueldoSemanal < 0) {
+    setMsg("Completa todos los campos correctamente.");
     return;
   }
 
-  const sucObj = sucursalesMap.get(String(sucursalId));
-  if (!sucObj || sucObj.activa !== true) {
-    setMsg("Esa sucursal está inactiva. Selecciona otra.");
-    return;
+  if (rol === "Empleado") {
+    sucursalId = "";
   }
 
-  const sucursalNombre = sucObj.nombre || "";
+  let sucursalNombre = "";
+
+  if (rol !== "Empleado") {
+    if (!sucursalId) {
+      setMsg("Selecciona una sucursal.");
+      return;
+    }
+
+    const sucObj = sucursalesMap.get(String(sucursalId));
+    if (!sucObj || sucObj.activa !== true) {
+      setMsg("Esa sucursal está inactiva. Selecciona otra.");
+      return;
+    }
+
+    sucursalNombre = sucObj.nombre || "";
+  }
 
   btnGuardar.disabled = true;
 
@@ -337,21 +402,35 @@ formEmpleado.addEventListener("submit", async (e) => {
       await db.collection("empleados").doc(editId).update({
         nombre,
         rol,
-        sucursalId: String(sucursalId),
-        sucursalNombre: String(sucursalNombre)
+        sueldoSemanal,
+        sucursalId: String(sucursalId || ""),
+        sucursalNombre: String(sucursalNombre || "")
       });
 
-      let detalle = `Actualizó empleado: ${nombre} (${rol}) en ${sucursalNombre || "-"}`;
+      let detalle = `Actualizó empleado: ${nombre} (${rol})`;
+
+      if (rol !== "Empleado") {
+        detalle += ` en ${sucursalNombre || "-"}`;
+      } else {
+        detalle += ` (Sin sucursal)`;
+      }
 
       if (before) {
         const cambios = [];
         const bNombre = before.nombre || "";
         const bRol = before.rol || "";
+        const bSueldo = Number(before.sueldoSemanal || 0);
         const bSuc = before.sucursalNombre || getSucursalNombreById(before.sucursalId);
 
         if (String(bNombre) !== String(nombre)) cambios.push(`Nombre: "${bNombre}" → "${nombre}"`);
         if (String(bRol) !== String(rol)) cambios.push(`Rol: "${bRol}" → "${rol}"`);
-        if (String(bSuc || "") !== String(sucursalNombre || "")) cambios.push(`Sucursal: "${bSuc || "-"}" → "${sucursalNombre}"`);
+        if (Number(bSueldo) !== Number(sueldoSemanal)) cambios.push(`Sueldo semanal: $${bSueldo} → $${sueldoSemanal}`);
+
+        if (rol !== "Empleado") {
+          if (String(bSuc || "") !== String(sucursalNombre || "")) cambios.push(`Sucursal: "${bSuc || "-"}" → "${sucursalNombre}"`);
+        } else {
+          if (String(before.sucursalId || "") !== "") cambios.push(`Sucursal: "${bSuc || "-"}" → "Sin sucursal"`);
+        }
 
         if (cambios.length) detalle += ` | Cambios: ${cambios.join(" | ")}`;
       }
@@ -361,17 +440,22 @@ formEmpleado.addEventListener("submit", async (e) => {
       setMsg("Empleado actualizado.", false);
       limpiarForm();
     } else {
-      const docRef = await db.collection("empleados").add({
+      await db.collection("empleados").add({
         nombre,
         rol,
-        sucursalId: String(sucursalId),
-        sucursalNombre: String(sucursalNombre),
+        sueldoSemanal,
+        sucursalId: String(sucursalId || ""),
+        sucursalNombre: String(sucursalNombre || ""),
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
 
+      let detalle = `Registró empleado: ${nombre} (${rol})`;
+      if (rol !== "Empleado") detalle += ` en ${sucursalNombre || "-"}`;
+      else detalle += ` (Sin sucursal)`;
+
       await addLog({
         accion: "crear",
-        detalle: `Registró empleado: ${nombre} (${rol}) en ${sucursalNombre || "-"}`
+        detalle
       });
 
       setMsg("Empleado registrado.", false);
@@ -446,7 +530,7 @@ btnModalEliminar.addEventListener("click", async () => {
       const suc = before.sucursalNombre || getSucursalNombreById(before.sucursalId);
       await addLog({
         accion: "eliminar",
-        detalle: `Eliminó empleado: ${nombre} (${rol}) de ${suc || "-"}`
+        detalle: `Eliminó empleado: ${nombre} (${rol}) de ${suc || "Sin sucursal"}`
       });
     } else {
       await addLog({
