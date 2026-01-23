@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tortillería El Maizal | Historial</title>
+
+  <link rel="icon" type="image/png" href="imagenes/logo1.png" />
+  <link rel="stylesheet" href="historial.css" />
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <img src="imagenes/logo1.png" alt="Logo El Maizal">
+        <div class="title">
+          <strong>El Maizal</strong>
+          <span>Historial de cambios</span>
+        </div>
+      </div>
+
+      <div class="userbox">
+        <div class="email" id="userEmail">Cargando...</div>
+        <button class="btn-logout" id="btnLogout">Cerrar sesión</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" id="app" style="display:none;">
+    <section class="actions-top">
+      <button class="btn-back" id="btnGoPanel">⬅ Ir a Panel</button>
+      <button class="btn-go2" id="btnGoSucursales">🏬 Ir a Sucursales</button>
+    </section>
+
+    <section class="card">
+      <div class="head-row">
+        <div>
+          <h1>Historial.</h1>
+          <p class="sub">Aquí se registran acciones importantes del sistema.</p>
+        </div>
+
+        <button class="btn-danger" id="btnBorrarLogs">Eliminar historial</button>
+      </div>
+
+      <div class="filters">
+        <select id="filtroModulo">
+          <option value="todos">Todos los módulos</option>
+          <option value="sucursales">Sucursales</option>
+          <option value="ventas">Ventas</option>
+          <option value="gastos">Gastos</option>
+          <option value="empleados">Empleados</option>
+          <option value="sistema">Sistema</option>
+        </select>
+
+        <select id="filtroAccion">
+          <option value="todas">Todas las acciones</option>
+          <option value="crear">Crear</option>
+          <option value="editar">Editar</option>
+          <option value="activar">Activar</option>
+          <option value="desactivar">Desactivar</option>
+          <option value="eliminar">Eliminar</option>
+        </select>
+
+        <input type="date" id="filtroFecha" />
+        <button class="btn-clear" id="btnClearFecha">Quitar fecha</button>
+      </div>
+
+      <p class="msg" id="msg"></p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Módulo</th>
+              <th>Acción</th>
+              <th>Usuario</th>
+              <th>Detalle</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyLogs"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div class="loading" id="loading">Verificando sesión...</div>
+
+  <div class="modal-backdrop" id="modalBackdrop" style="display:none;">
+    <div class="modal">
+      <h3>Eliminar historial</h3>
+      <p>
+        Esta acción eliminará TODOS los logs del sistema.
+        <br><br>
+        Para confirmar escribe <b>ELIMINAR</b>
+      </p>
+
+      <div class="field">
+        <input type="text" id="confirmDeleteText" placeholder="Escribe ELIMINAR" />
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btnModalCancelar">Cancelar</button>
+        <button class="btn-danger" id="btnModalEliminar">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+
+  <script src="historial.js"></script>
+</body>
+</html>
