@@ -31,7 +31,6 @@ const montoInput = document.getElementById("monto");
 const msg = document.getElementById("msg");
 const btnGuardar = document.getElementById("btnGuardar");
 
-// (NUEVO) Select colaborador para categoría Trabajadores
 const fieldColaborador = document.getElementById("fieldColaborador");
 const colaboradorSelect = document.getElementById("colaborador");
 
@@ -59,7 +58,6 @@ const editMonto = document.getElementById("editMonto");
 const btnEditCancelar = document.getElementById("btnEditCancelar");
 const btnEditGuardar = document.getElementById("btnEditGuardar");
 
-// (NUEVO) Edit colaborador
 const editFieldColaborador = document.getElementById("editFieldColaborador");
 const editColaborador = document.getElementById("editColaborador");
 
@@ -112,9 +110,23 @@ function getSucursalNombreById(id) {
   return s?.nombre || "-";
 }
 
-// ============================
-// COLABORADORES (EMPLEADOS) POR SUCURSAL
-// ============================
+function getFechaKeyHoy() {
+  return new Date().toLocaleDateString("sv-SE");
+}
+
+async function addLog({ accion, detalle }) {
+  try {
+    const user = auth.currentUser;
+    await db.collection("logs").add({
+      modulo: "gastos",
+      accion: String(accion || ""),
+      detalle: String(detalle || ""),
+      userEmail: String(user?.email || ""),
+      fechaKey: getFechaKeyHoy(),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (e) {}
+}
 
 async function cargarColaboradoresEnSelect(selectEl, sucursalId, selectedId = "") {
   if (!selectEl) return;
@@ -140,9 +152,7 @@ async function cargarColaboradoresEnSelect(selectEl, sucursalId, selectedId = ""
     if (selectedId) {
       selectEl.value = String(selectedId);
     }
-  } catch (e) {
-    // si falla no rompemos la página
-  }
+  } catch (e) {}
 }
 
 function toggleColaboradorField() {
@@ -168,10 +178,6 @@ function toggleEditColaboradorField() {
     if (editColaborador) editColaborador.value = "";
   }
 }
-
-// ============================
-// SUCURSALES DINAMICAS
-// ============================
 
 function fillSucursalSelects() {
   sucursalSelect.innerHTML = `<option value="">Selecciona sucursal</option>`;
@@ -235,10 +241,6 @@ function escucharSucursales() {
     });
 }
 
-// ============================
-// MODALES
-// ============================
-
 function abrirModalEliminar(id) {
   deleteId = id;
   modalBackdrop.style.display = "flex";
@@ -259,7 +261,6 @@ async function abrirModalEditar(g) {
 
   toggleEditColaboradorField();
 
-  // si es trabajadores, cargar colaboradores de esa sucursal
   if (String(g.categoria) === "Trabajadores") {
     await cargarColaboradoresEnSelect(editColaborador, editSucursal.value, g.colaboradorId || "");
   } else {
@@ -273,10 +274,6 @@ function cerrarModalEditar() {
   editId = null;
   modalEditBackdrop.style.display = "none";
 }
-
-// ============================
-// FILTROS
-// ============================
 
 function getGastosFiltrados() {
   const suc = filtroSucursal.value;
@@ -320,7 +317,6 @@ function renderTabla() {
 
     const catTxt = escapeHtml(g.categoria || "-");
 
-    // si es Trabajadores, mostramos el colaborador en la descripción para que se vea claro
     let descFinal = g.descripcion || "-";
     if (String(g.categoria) === "Trabajadores" && (g.colaboradorNombre || g.colaboradorId)) {
       descFinal = `${descFinal} (Colaborador: ${g.colaboradorNombre || "Sin nombre"})`;
@@ -368,10 +364,6 @@ function renderTodo() {
   renderResumen();
 }
 
-// ============================
-// BORRAR POR RANGO
-// ============================
-
 async function eliminarGastosPorRango(ini, fin) {
   const snap = await db
     .collection("gastos")
@@ -402,10 +394,6 @@ async function eliminarGastosPorRango(ini, fin) {
   return count;
 }
 
-// ============================
-// AUTH
-// ============================
-
 auth.onAuthStateChanged((user) => {
   if (!user) {
     window.location.href = "index.html";
@@ -426,10 +414,6 @@ auth.onAuthStateChanged((user) => {
       renderTodo();
     });
 });
-
-// ============================
-// NAV
-// ============================
 
 btnBack.addEventListener("click", () => {
   window.location.href = "panel.html";
@@ -452,10 +436,6 @@ btnLogout.addEventListener("click", async () => {
   window.location.href = "index.html";
 });
 
-// ============================
-// EVENTOS FILTROS
-// ============================
-
 filtroSucursal.addEventListener("change", renderTodo);
 filtroCategoria.addEventListener("change", renderTodo);
 filtroFecha.addEventListener("change", renderTodo);
@@ -465,17 +445,12 @@ btnClearFecha.addEventListener("click", () => {
   renderTodo();
 });
 
-// ============================
-// EVENTOS FORM
-// ============================
-
 descripcionInput.addEventListener("input", () => setMsg(""));
 montoInput.addEventListener("input", () => setMsg(""));
 
 sucursalSelect.addEventListener("change", async () => {
   setMsg("");
 
-  // recargar colaboradores por sucursal si está en Trabajadores
   if (categoriaSelect.value === "Trabajadores") {
     await cargarColaboradoresEnSelect(colaboradorSelect, sucursalSelect.value);
   }
@@ -508,10 +483,6 @@ if (editCategoria) {
   });
 }
 
-// ============================
-// GUARDAR GASTO
-// ============================
-
 formGasto.addEventListener("submit", async (e) => {
   e.preventDefault();
   setMsg("");
@@ -534,7 +505,6 @@ formGasto.addEventListener("submit", async (e) => {
     return;
   }
 
-  // Si es trabajadores -> colaborador obligatorio
   let colaboradorId = "";
   let colaboradorNombre = "";
 
@@ -562,14 +532,21 @@ formGasto.addEventListener("submit", async (e) => {
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     };
 
-    // Guardar anticipo para pagos.html
     if (categoria === "Trabajadores") {
       payload.colaboradorId = String(colaboradorId);
       payload.colaboradorNombre = String(colaboradorNombre || "");
-      payload.esAnticipo = true; // <- clave
+      payload.esAnticipo = true;
     }
 
-    await db.collection("gastos").add(payload);
+    const docRef = await db.collection("gastos").add(payload);
+
+    const sucTxt = sucursalNombre || "-";
+    const det =
+      categoria === "Trabajadores"
+        ? `Registró gasto (${categoria}) en ${sucTxt}. Colaborador: ${colaboradorNombre || "-"} | $${Number(monto || 0).toFixed(2)} | ${descripcion}`
+        : `Registró gasto (${categoria}) en ${sucTxt}. $${Number(monto || 0).toFixed(2)} | ${descripcion}`;
+
+    await addLog({ accion: "crear", detalle: det });
 
     setMsg("Gasto registrado.", false);
 
@@ -582,10 +559,6 @@ formGasto.addEventListener("submit", async (e) => {
     btnGuardar.disabled = false;
   }
 });
-
-// ============================
-// ELIMINAR POR RANGO
-// ============================
 
 btnResetRango.addEventListener("click", async () => {
   const ini = fechaInicio.value;
@@ -614,6 +587,11 @@ btnResetRango.addEventListener("click", async () => {
       return;
     }
 
+    await addLog({
+      accion: "eliminar",
+      detalle: `Eliminó gastos por rango de fechas: ${ini} a ${fin}. Registros eliminados: ${eliminados}.`
+    });
+
     alert(`Listo. Gastos eliminados: ${eliminados}`);
 
     fechaInicio.value = "";
@@ -624,10 +602,6 @@ btnResetRango.addEventListener("click", async () => {
     btnResetRango.disabled = false;
   }
 });
-
-// ============================
-// MODAL ELIMINAR
-// ============================
 
 btnModalCancelar.addEventListener("click", () => {
   cerrarModalEliminar();
@@ -643,8 +617,32 @@ btnModalEliminar.addEventListener("click", async () => {
   btnModalEliminar.disabled = true;
 
   try {
+    let before = null;
+    try {
+      const snap = await db.collection("gastos").doc(deleteId).get();
+      if (snap.exists) before = snap.data() || null;
+    } catch (e) {}
+
     await db.collection("gastos").doc(deleteId).delete();
     cerrarModalEliminar();
+
+    if (before) {
+      const sucNombre = before.sucursalNombre || getSucursalNombreById(before.sucursalId);
+      const cat = before.categoria || "-";
+      const monto = Number(before.totalPesos || 0).toFixed(2);
+      const desc = before.descripcion || "-";
+      const colab = before.colaboradorNombre ? ` | Colaborador: ${before.colaboradorNombre}` : "";
+      await addLog({
+        accion: "eliminar",
+        detalle: `Eliminó gasto (${cat}) en ${sucNombre || "-"}. $${monto} | ${desc}${colab}`
+      });
+    } else {
+      await addLog({
+        accion: "eliminar",
+        detalle: `Eliminó un gasto (ID: ${deleteId}).`
+      });
+    }
+
     setMsg("Gasto eliminado.", false);
   } catch (error) {
     setMsg("No se pudo eliminar. Intenta de nuevo.");
@@ -652,10 +650,6 @@ btnModalEliminar.addEventListener("click", async () => {
     btnModalEliminar.disabled = false;
   }
 });
-
-// ============================
-// MODAL EDITAR
-// ============================
 
 btnEditCancelar.addEventListener("click", () => {
   cerrarModalEditar();
@@ -684,7 +678,6 @@ btnEditGuardar.addEventListener("click", async () => {
     return;
   }
 
-  // si es trabajadores -> colaborador obligatorio
   let colaboradorId = "";
   let colaboradorNombre = "";
 
@@ -702,6 +695,12 @@ btnEditGuardar.addEventListener("click", async () => {
   btnEditGuardar.disabled = true;
 
   try {
+    let before = null;
+    try {
+      const snap = await db.collection("gastos").doc(editId).get();
+      if (snap.exists) before = snap.data() || null;
+    } catch (e) {}
+
     const updatePayload = {
       sucursalId: String(sucursalId),
       sucursalNombre: String(getSucursalNombreById(sucursalId) || ""),
@@ -716,13 +715,39 @@ btnEditGuardar.addEventListener("click", async () => {
       updatePayload.colaboradorNombre = String(colaboradorNombre || "");
       updatePayload.esAnticipo = true;
     } else {
-      // si cambió a otra categoría, limpiamos campos de colaborador
       updatePayload.colaboradorId = firebase.firestore.FieldValue.delete();
       updatePayload.colaboradorNombre = firebase.firestore.FieldValue.delete();
       updatePayload.esAnticipo = firebase.firestore.FieldValue.delete();
     }
 
     await db.collection("gastos").doc(editId).update(updatePayload);
+
+    const sucNombre = getSucursalNombreById(sucursalId) || "-";
+    const montoTxt = Number(monto || 0).toFixed(2);
+
+    let detalle = `Editó gasto (${categoria}) en ${sucNombre}. $${montoTxt} | ${descripcion}`;
+    if (categoria === "Trabajadores") detalle += ` | Colaborador: ${colaboradorNombre || "-"}`;
+
+    if (before) {
+      const cambios = [];
+      const bSuc = before.sucursalNombre || getSucursalNombreById(before.sucursalId);
+      const bCat = before.categoria || "";
+      const bDesc = before.descripcion || "";
+      const bMonto = Number(before.totalPesos || 0);
+      const bCol = before.colaboradorNombre || "";
+
+      if (String(bSuc || "") !== String(sucNombre || "")) cambios.push(`Sucursal: "${bSuc || "-"}" → "${sucNombre}"`);
+      if (String(bCat) !== String(categoria)) cambios.push(`Categoría: "${bCat}" → "${categoria}"`);
+      if (String(bDesc) !== String(descripcion)) cambios.push(`Descripción: "${bDesc}" → "${descripcion}"`);
+      if (Number(bMonto) !== Number(monto)) cambios.push(`Monto: $${bMonto.toFixed(2)} → $${Number(monto).toFixed(2)}`);
+      if (String(bCol || "") !== String(colaboradorNombre || "")) {
+        if (bCol || colaboradorNombre) cambios.push(`Colaborador: "${bCol || "-"}" → "${colaboradorNombre || "-"}"`);
+      }
+
+      if (cambios.length) detalle += ` | Cambios: ${cambios.join(" | ")}`;
+    }
+
+    await addLog({ accion: "editar", detalle });
 
     cerrarModalEditar();
     setMsg("Gasto actualizado.", false);
@@ -733,5 +758,4 @@ btnEditGuardar.addEventListener("click", async () => {
   }
 });
 
-// init visual
 toggleColaboradorField();
