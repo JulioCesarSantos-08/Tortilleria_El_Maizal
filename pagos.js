@@ -54,7 +54,6 @@ let deleteId = null;
 let pagosCache = [];
 let msgTimer = null;
 
-// Cache de sucursales: { id -> {nombre, activa} }
 let sucursalesMap = new Map();
 
 function setMsg(text = "", isError = true, autoClear = true) {
@@ -93,9 +92,23 @@ function escapeHtml(text) {
     .replaceAll("'", "&#039;");
 }
 
-// ============================
-// SUCURSALES DINAMICAS
-// ============================
+function getFechaKeyHoy() {
+  return new Date().toLocaleDateString("sv-SE");
+}
+
+async function addLog({ accion, detalle }) {
+  try {
+    const user = auth.currentUser;
+    await db.collection("logs").add({
+      modulo: "pagos",
+      accion: String(accion || ""),
+      detalle: String(detalle || ""),
+      userEmail: String(user?.email || ""),
+      fechaKey: getFechaKeyHoy(),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (e) {}
+}
 
 function getSucursalNombreById(id) {
   if (!id) return "-";
@@ -150,10 +163,6 @@ function escucharSucursales() {
     });
 }
 
-// ============================
-// COLABORADORES POR SUCURSAL
-// ============================
-
 async function cargarColaboradoresPorSucursalId(sucursalId) {
   colaboradorSelect.innerHTML = `<option value="">Selecciona colaborador</option>`;
   if (!sucursalId) return;
@@ -172,11 +181,7 @@ async function cargarColaboradoresPorSucursalId(sucursalId) {
   });
 }
 
-// ============================
-// CALCULADORA (NORMAL + INVERSA)
-// ============================
-
-let lastEdited = "dias"; // dias | total
+let lastEdited = "dias";
 
 function getTotalCalculado() {
   const dias = Number(diasInput.value || 0);
@@ -203,14 +208,9 @@ function recalcularDiasDesdeTotal() {
   recalcularAnticipoYPendiente();
 }
 
-// ============================
-// ANTICIPOS (desde gastos)
-// ============================
-
 async function getAnticiposDetectados({ sucursalId, colaboradorId, fechaKey }) {
   if (!sucursalId || !colaboradorId || !fechaKey) return 0;
 
-  // Anticipos del mismo día
   const snap = await db.collection("gastos")
     .where("sucursalId", "==", String(sucursalId))
     .where("categoria", "==", "Trabajadores")
@@ -251,10 +251,6 @@ async function recalcularAnticipoYPendiente() {
     pendientePagarInput.value = formatMoney(totalCalc);
   }
 }
-
-// ============================
-// TABLA + RESUMEN
-// ============================
 
 function getPagosFiltrados() {
   const suc = filtroSucursal.value;
@@ -336,10 +332,6 @@ function renderTodo() {
   renderResumen();
 }
 
-// ============================
-// AUTH + LISTENERS
-// ============================
-
 auth.onAuthStateChanged((user) => {
   if (!user) {
     window.location.href = "index.html";
@@ -360,7 +352,6 @@ auth.onAuthStateChanged((user) => {
       renderTodo();
     });
 
-  // default fecha hoy
   const hoy = new Date().toLocaleDateString("sv-SE");
   fechaPagoInput.value = hoy;
 });
@@ -431,10 +422,6 @@ btnClearFecha.addEventListener("click", () => {
   renderTodo();
 });
 
-// ============================
-// GUARDAR PAGO
-// ============================
-
 formPago.addEventListener("submit", async (e) => {
   e.preventDefault();
   setMsg("");
@@ -456,7 +443,6 @@ formPago.addEventListener("submit", async (e) => {
     return;
   }
 
-  // Evitar registrar en sucursal inactiva
   const sucObj = sucursalesMap.get(String(sucursalId));
   if (!sucObj || sucObj.activa !== true) {
     setMsg("Esa sucursal está inactiva. Selecciona otra.");
@@ -490,6 +476,11 @@ formPago.addEventListener("submit", async (e) => {
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 
+    await addLog({
+      accion: "crear",
+      detalle: `Registró pago | Sucursal: ${sucursalNombre || sucursalId} | Colaborador: ${colaboradorNombre || colaboradorId} | Fecha: ${fechaKey} | Días: ${Number(dias).toFixed(2)} | Pago/día: $${Number(pagoDia).toFixed(2)} | Total: $${Number(totalCalculado).toFixed(2)} | Anticipo: $${Number(anticipo).toFixed(2)} | Pendiente: $${Number(pendiente).toFixed(2)}`
+    });
+
     setMsg("Pago registrado.", false);
 
     diasInput.value = "";
@@ -503,10 +494,6 @@ formPago.addEventListener("submit", async (e) => {
     btnGuardar.disabled = false;
   }
 });
-
-// ============================
-// ELIMINAR PAGO
-// ============================
 
 btnModalCancelar.addEventListener("click", () => {
   cerrarModalEliminar();
@@ -522,8 +509,28 @@ btnModalEliminar.addEventListener("click", async () => {
   btnModalEliminar.disabled = true;
 
   try {
+    const pagoSnap = await db.collection("pagos").doc(String(deleteId)).get();
+    const before = pagoSnap.exists ? (pagoSnap.data() || {}) : null;
+
     await db.collection("pagos").doc(deleteId).delete();
     cerrarModalEliminar();
+
+    if (before) {
+      const sucursalNombre = before.sucursalNombre || before.sucursalId || "-";
+      const colaboradorNombre = before.colaboradorNombre || before.colaboradorId || "-";
+      const fechaKey = before.fechaKey || "-";
+
+      await addLog({
+        accion: "eliminar",
+        detalle: `Eliminó pago | Sucursal: ${sucursalNombre} | Colaborador: ${colaboradorNombre} | Fecha: ${fechaKey} | Total: $${Number(before.totalCalculado || 0).toFixed(2)} | Anticipo: $${Number(before.anticipo || 0).toFixed(2)} | Pendiente: $${Number(before.pendiente || 0).toFixed(2)}`
+      });
+    } else {
+      await addLog({
+        accion: "eliminar",
+        detalle: `Eliminó un pago (ID: ${deleteId}).`
+      });
+    }
+
     setMsg("Pago eliminado.", false);
   } catch (error) {
     setMsg("No se pudo eliminar. Intenta de nuevo.");
@@ -532,6 +539,5 @@ btnModalEliminar.addEventListener("click", async () => {
   }
 });
 
-// init
 anticipoDetectadoInput.value = formatMoney(0);
 pendientePagarInput.value = formatMoney(0);
