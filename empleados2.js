@@ -36,7 +36,8 @@ const btnGuardar = document.getElementById("btnGuardar");
 
 const filtroSucursal = document.getElementById("filtroSucursal");
 const filtroTipo = document.getElementById("filtroTipo");
-const filtroFecha = document.getElementById("filtroFecha");
+const filtroDesde = document.getElementById("filtroDesde");
+const filtroHasta = document.getElementById("filtroHasta");
 const btnClearFecha = document.getElementById("btnClearFecha");
 
 const tbodyVentas = document.getElementById("tbodyVentas");
@@ -223,10 +224,14 @@ async function cargarEmpleadosPorSucursalId(sucursalId) {
     .where("sucursalId", "==", String(sucursalId))
     .get();
 
-  snap.forEach((doc) => {
-    const data = doc.data();
+  const lista = snap.docs
+    .map(d => ({ id: d.id, ...(d.data() || {}) }))
+    .filter(e => String(e.rol || "") === "Empleado" || String(e.rol || "") === "Encargado")
+    .sort((a, b) => String(a.nombre || "").localeCompare(String(b.nombre || "")));
+
+  lista.forEach((data) => {
     const option = document.createElement("option");
-    option.value = doc.id;
+    option.value = data.id;
     option.textContent = `${data.nombre || "Sin nombre"} (${data.rol || "Sin rol"})`;
     empleadoSelect.appendChild(option);
   });
@@ -242,10 +247,22 @@ function cerrarModalEliminar() {
   modalBackdrop.style.display = "none";
 }
 
+function isFechaEnRango(fechaKey, desde, hasta) {
+  if (!fechaKey) return false;
+  const f = String(fechaKey || "");
+  const d = String(desde || "");
+  const h = String(hasta || "");
+
+  if (d && f < d) return false;
+  if (h && f > h) return false;
+  return true;
+}
+
 function getVentasFiltradas() {
   const suc = filtroSucursal.value;
   const tipo = filtroTipo.value;
-  const fecha = filtroFecha.value;
+  const desde = filtroDesde.value;
+  const hasta = filtroHasta.value;
 
   let lista = [...ventasCache];
 
@@ -257,8 +274,8 @@ function getVentasFiltradas() {
     lista = lista.filter(v => String(v.tipoVenta) === String(tipo));
   }
 
-  if (fecha) {
-    lista = lista.filter(v => String(v.fechaKey || "") === String(fecha));
+  if (desde || hasta) {
+    lista = lista.filter(v => isFechaEnRango(v.fechaKey, desde, hasta));
   }
 
   return lista;
@@ -266,7 +283,8 @@ function getVentasFiltradas() {
 
 function getGastosFiltrados() {
   const suc = filtroSucursal.value;
-  const fecha = filtroFecha.value;
+  const desde = filtroDesde.value;
+  const hasta = filtroHasta.value;
 
   let lista = [...gastosCache];
 
@@ -274,8 +292,8 @@ function getGastosFiltrados() {
     lista = lista.filter(g => String(g.sucursalId || "") === String(suc));
   }
 
-  if (fecha) {
-    lista = lista.filter(g => String(g.fechaKey || "") === String(fecha));
+  if (desde || hasta) {
+    lista = lista.filter(g => isFechaEnRango(g.fechaKey, desde, hasta));
   }
 
   return lista;
@@ -504,10 +522,12 @@ empleadoSelect.addEventListener("change", () => setMsg(""));
 
 filtroSucursal.addEventListener("change", renderTodo);
 filtroTipo.addEventListener("change", renderTodo);
-filtroFecha.addEventListener("change", renderTodo);
+filtroDesde.addEventListener("change", renderTodo);
+filtroHasta.addEventListener("change", renderTodo);
 
 btnClearFecha.addEventListener("click", () => {
-  filtroFecha.value = "";
+  filtroDesde.value = "";
+  filtroHasta.value = "";
   renderTodo();
 });
 
@@ -559,7 +579,15 @@ formVenta.addEventListener("submit", async (e) => {
       return;
     }
 
-    empleadoNombre = snap.data().nombre || "Empleado";
+    const data = snap.data() || {};
+    const rol = String(data.rol || "");
+
+    if (rol !== "Empleado" && rol !== "Encargado") {
+      setMsg("Ese usuario no está permitido para este tipo de venta.");
+      return;
+    }
+
+    empleadoNombre = data.nombre || "Empleado";
   }
 
   btnGuardar.disabled = true;
