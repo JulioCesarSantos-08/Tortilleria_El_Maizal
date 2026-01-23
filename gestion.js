@@ -20,6 +20,9 @@ const userEmail = document.getElementById("userEmail");
 const btnBack = document.getElementById("btnBack");
 const btnLogout = document.getElementById("btnLogout");
 
+// ✅ NUEVO: botón para ir al historial
+const btnGoHistorial = document.getElementById("btnGoHistorial");
+
 const btnNuevaSucursal = document.getElementById("btnNuevaSucursal");
 const tbodySucursales = document.getElementById("tbodySucursales");
 const msg = document.getElementById("msg");
@@ -62,6 +65,35 @@ function escapeHtml(text) {
     .replaceAll("'", "&#039;");
 }
 
+// ============================
+// LOGS
+// ============================
+
+function getFechaKeyHoy() {
+  return new Date().toLocaleDateString("sv-SE"); // YYYY-MM-DD
+}
+
+async function addLog({ accion, detalle }) {
+  try {
+    const user = auth.currentUser;
+    await db.collection("logs").add({
+      modulo: "sucursales",
+      accion: String(accion || ""),
+      detalle: String(detalle || ""),
+      userEmail: String(user?.email || ""),
+      fechaKey: getFechaKeyHoy(),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (e) {
+    // No bloqueamos la app si falla el log
+    console.warn("No se pudo guardar log:", e);
+  }
+}
+
+// ============================
+// MODALES
+// ============================
+
 function abrirModalEditar(id, data) {
   editId = id;
   modalTitle.textContent = id ? "Editar sucursal" : "Nueva sucursal";
@@ -86,6 +118,10 @@ function cerrarModalEliminar() {
   deleteId = null;
   modalDeleteBackdrop.style.display = "none";
 }
+
+// ============================
+// HELPERS
+// ============================
 
 function isNumericId(str) {
   return /^\d+$/.test(String(str));
@@ -145,6 +181,10 @@ async function deleteBySucursalLegacy(collectionName, sucursalLegacy) {
   return totalDeleted;
 }
 
+// ============================
+// RENDER
+// ============================
+
 function renderTabla(docs) {
   tbodySucursales.innerHTML = "";
 
@@ -199,7 +239,9 @@ function renderTabla(docs) {
       const snap = await db.collection("sucursales").doc(id).get();
       if (!snap.exists) return;
 
-      const activa = !!snap.data().activa;
+      const data = snap.data() || {};
+      const activa = !!data.activa;
+      const nombre = data.nombre || `Sucursal ${id}`;
 
       try {
         await db.collection("sucursales").doc(id).set({
@@ -208,6 +250,11 @@ function renderTabla(docs) {
         }, { merge: true });
 
         setMsg(`Sucursal ${!activa ? "activada" : "desactivada"}.`, false);
+
+        await addLog({
+          accion: !activa ? "activar" : "desactivar",
+          detalle: `${!activa ? "Activó" : "Desactivó"} la sucursal ${id} (${nombre}).`
+        });
       } catch (e) {
         setMsg("No se pudo actualizar.");
       }
@@ -221,6 +268,10 @@ function renderTabla(docs) {
     });
   });
 }
+
+// ============================
+// AUTH
+// ============================
 
 auth.onAuthStateChanged((user) => {
   if (!user) {
@@ -239,14 +290,29 @@ auth.onAuthStateChanged((user) => {
     });
 });
 
+// ============================
+// NAV
+// ============================
+
 btnBack.addEventListener("click", () => {
   window.location.href = "panel.html";
 });
+
+// ✅ NUEVO: ir a historial
+if (btnGoHistorial) {
+  btnGoHistorial.addEventListener("click", () => {
+    window.location.href = "historial.html";
+  });
+}
 
 btnLogout.addEventListener("click", async () => {
   await auth.signOut();
   window.location.href = "index.html";
 });
+
+// ============================
+// NUEVA SUCURSAL
+// ============================
 
 btnNuevaSucursal.addEventListener("click", async () => {
   try {
@@ -277,6 +343,7 @@ btnModalGuardar.addEventListener("click", async () => {
   try {
     if (!editId) {
       const newId = await getNextSucursalId();
+
       await db.collection("sucursales").doc(newId).set({
         nombre,
         activa,
@@ -285,8 +352,20 @@ btnModalGuardar.addEventListener("click", async () => {
 
       cerrarModalEditar();
       setMsg("Sucursal agregada.", false);
+
+      await addLog({
+        accion: "crear",
+        detalle: `Creó sucursal ${newId} (${nombre}) - Estado: ${activa ? "Activa" : "Inactiva"}.`
+      });
+
       return;
     }
+
+    // EDITAR
+    const beforeSnap = await db.collection("sucursales").doc(editId).get();
+    const before = beforeSnap.exists ? (beforeSnap.data() || {}) : {};
+    const beforeNombre = before.nombre || `Sucursal ${editId}`;
+    const beforeActiva = !!before.activa;
 
     await db.collection("sucursales").doc(editId).set({
       nombre,
@@ -296,12 +375,26 @@ btnModalGuardar.addEventListener("click", async () => {
 
     cerrarModalEditar();
     setMsg("Sucursal actualizada.", false);
+
+    const cambios = [];
+    if (String(beforeNombre) !== String(nombre)) cambios.push(`Nombre: "${beforeNombre}" → "${nombre}"`);
+    if (beforeActiva !== activa) cambios.push(`Estado: ${beforeActiva ? "Activa" : "Inactiva"} → ${activa ? "Activa" : "Inactiva"}`);
+
+    await addLog({
+      accion: "editar",
+      detalle: `Editó sucursal ${editId}. ${cambios.length ? "Cambios: " + cambios.join(" | ") : "Sin cambios detectados."}`
+    });
+
   } catch (e) {
     setMsg("No se pudo guardar.");
   } finally {
     btnModalGuardar.disabled = false;
   }
 });
+
+// ============================
+// ELIMINAR SUCURSAL
+// ============================
 
 btnDeleteCancelar.addEventListener("click", cerrarModalEliminar);
 
@@ -317,6 +410,13 @@ btnDeleteConfirmar.addEventListener("click", async () => {
     setMsg("Escribe ELIMINAR para confirmar.");
     return;
   }
+
+  // obtenemos nombre antes de borrar
+  let sucNombre = `Sucursal ${deleteId}`;
+  try {
+    const snap = await db.collection("sucursales").doc(deleteId).get();
+    if (snap.exists) sucNombre = snap.data()?.nombre || sucNombre;
+  } catch (e) {}
 
   const ok = confirm(
     `Se borrará la sucursal ${deleteId} y TODOS sus registros.\n\n¿Seguro que deseas continuar?`
@@ -354,6 +454,15 @@ btnDeleteConfirmar.addEventListener("click", async () => {
       `Sucursal eliminada. Ventas: ${totalVentas}, Gastos: ${totalGastos}, Empleados: ${totalEmpleados}.`,
       false
     );
+
+    await addLog({
+      accion: "eliminar",
+      detalle:
+        `Eliminó sucursal ${deleteId} (${sucNombre}). ` +
+        `Ventas borradas: ${totalVentas}. Gastos borrados: ${totalGastos}. ` +
+        `Empleados borrados: ${totalEmpleados}. (Eliminar empleados: ${chkEliminarEmpleados.checked ? "Sí" : "No"})`
+    });
+
   } catch (e) {
     setMsg("No se pudo eliminar todo. Intenta de nuevo.");
   } finally {
