@@ -99,6 +99,24 @@ function escapeHtml(text) {
     .replaceAll("'", "&#039;");
 }
 
+function getFechaKeyHoy() {
+  return new Date().toLocaleDateString("sv-SE");
+}
+
+async function addLog({ accion, detalle }) {
+  try {
+    const user = auth.currentUser;
+    await db.collection("logs").add({
+      modulo: "ventas",
+      accion: String(accion || ""),
+      detalle: String(detalle || ""),
+      userEmail: String(user?.email || ""),
+      fechaKey: getFechaKeyHoy(),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (e) {}
+}
+
 function calcFromKilos() {
   const kilos = Number(kilosInput.value || 0);
   const precio = Number(precioKiloInput.value || 0);
@@ -344,6 +362,15 @@ function renderTabla() {
           pagado: nuevoEstado,
           updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
+
+        const suc = venta.sucursalNombre || getSucursalNombreById(venta.sucursalId);
+        const emp = venta.empleadoNombre || "Local";
+        const total = Number(venta.totalPesos || 0);
+
+        await addLog({
+          accion: "editar",
+          detalle: `Marcó venta como ${nuevoEstado ? "Pagado" : "No pagado"} | Sucursal: ${suc || "-"} | Tipo: ${venta.tipoVenta || "-"} | Empleado: ${emp} | Total: $${total.toFixed(2)}`
+        });
       } catch (e) {
         setMsg("No se pudo actualizar el pago.");
       }
@@ -538,7 +565,7 @@ formVenta.addEventListener("submit", async (e) => {
   btnGuardar.disabled = true;
 
   try {
-    await db.collection("ventas").add({
+    const payload = {
       sucursalId: String(sucursalId),
       sucursalNombre: String(sucursalNombre || ""),
       tipoVenta,
@@ -548,8 +575,18 @@ formVenta.addEventListener("submit", async (e) => {
       precioKilo,
       totalPesos,
       pagado: false,
-      fechaKey: new Date().toLocaleDateString("sv-SE"),
+      fechaKey: getFechaKeyHoy(),
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    await db.collection("ventas").add(payload);
+
+    const suc = sucursalNombre || "-";
+    const emp = empleadoNombre || "Local";
+
+    await addLog({
+      accion: "crear",
+      detalle: `Registró venta | Sucursal: ${suc} | Tipo: ${tipoVenta} | Empleado: ${emp} | Kilos: ${kilos} | Precio: $${precioKilo.toFixed(2)} | Total: $${totalPesos.toFixed(2)} | Estado: No pagado`
     });
 
     setMsg("Venta registrada (No pagado).", false);
@@ -587,6 +624,11 @@ btnResetRango.addEventListener("click", async () => {
     const eliminadasVentas = await eliminarColeccionPorRango("ventas", ini, fin);
     const eliminadosGastos = await eliminarColeccionPorRango("gastos", ini, fin);
 
+    await addLog({
+      accion: "eliminar",
+      detalle: `Eliminó registros por rango | ${ini} a ${fin} | Ventas: ${eliminadasVentas} | Gastos: ${eliminadosGastos}`
+    });
+
     alert(`Listo. Eliminados:\nVentas: ${eliminadasVentas}\nGastos: ${eliminadosGastos}`);
 
     fechaInicio.value = "";
@@ -612,8 +654,28 @@ btnModalEliminar.addEventListener("click", async () => {
   btnModalEliminar.disabled = true;
 
   try {
+    const snap = await db.collection("ventas").doc(deleteId).get();
+    const before = snap.exists ? (snap.data() || {}) : null;
+
     await db.collection("ventas").doc(deleteId).delete();
     cerrarModalEliminar();
+
+    if (before) {
+      const suc = before.sucursalNombre || getSucursalNombreById(before.sucursalId);
+      const emp = before.empleadoNombre || "Local";
+      const total = Number(before.totalPesos || 0);
+
+      await addLog({
+        accion: "eliminar",
+        detalle: `Eliminó venta | Sucursal: ${suc || "-"} | Tipo: ${before.tipoVenta || "-"} | Empleado: ${emp} | Total: $${total.toFixed(2)}`
+      });
+    } else {
+      await addLog({
+        accion: "eliminar",
+        detalle: `Eliminó una venta (ID: ${deleteId}).`
+      });
+    }
+
     setMsg("Venta eliminada.", false);
   } catch (error) {
     setMsg("No se pudo eliminar. Intenta de nuevo.");
