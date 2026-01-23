@@ -112,6 +112,24 @@ function getTodayKey() {
   return new Date().toLocaleDateString("sv-SE");
 }
 
+function getFechaKeyHoy() {
+  return new Date().toLocaleDateString("sv-SE");
+}
+
+async function addLog({ accion, detalle }) {
+  try {
+    const user = auth.currentUser;
+    await db.collection("logs").add({
+      modulo: "egresos",
+      accion: String(accion || ""),
+      detalle: String(detalle || ""),
+      userEmail: String(user?.email || ""),
+      fechaKey: getFechaKeyHoy(),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (e) {}
+}
+
 function actualizarDivision(total) {
   const n = sucursalesActivas.length || 0;
   sucursalesCountInput.value = n ? String(n) : "0";
@@ -373,6 +391,11 @@ formEgreso.addEventListener("submit", async (e) => {
 
     await batch.commit();
 
+    await addLog({
+      accion: "crear",
+      detalle: `Registró egreso global | Fecha: ${fechaKey} | Nota: ${nota} | Total: $${Number(totalGlobal).toFixed(2)} | Sucursales: ${sucursalesActivas.length} | División: $${Number(porSucursal).toFixed(2)}`
+    });
+
     setMsg("Egreso guardado y dividido entre sucursales.", false);
 
     notaInput.value = "";
@@ -413,6 +436,9 @@ btnModalEliminar.addEventListener("click", async () => {
   btnModalEliminar.disabled = true;
 
   try {
+    const egresoSnap = await db.collection("egresos").doc(String(deleteId)).get();
+    const before = egresoSnap.exists ? (egresoSnap.data() || {}) : null;
+
     const batch = db.batch();
 
     deleteRefs.forEach((gid) => {
@@ -423,6 +449,24 @@ btnModalEliminar.addEventListener("click", async () => {
     batch.delete(db.collection("egresos").doc(String(deleteId)));
 
     await batch.commit();
+
+    if (before) {
+      const fechaKey = before.fechaKey || "-";
+      const nota = before.nota || "-";
+      const total = Number(before.totalGlobal || 0);
+      const n = Number(before.sucursalesCount || 0);
+      const div = Number(before.division || 0);
+
+      await addLog({
+        accion: "eliminar",
+        detalle: `Eliminó egreso global | Fecha: ${fechaKey} | Nota: ${nota} | Total: $${total.toFixed(2)} | Sucursales: ${n} | División: $${div.toFixed(2)}`
+      });
+    } else {
+      await addLog({
+        accion: "eliminar",
+        detalle: `Eliminó un egreso global (ID: ${deleteId}).`
+      });
+    }
 
     cerrarModalEliminar();
     setMsg("Egreso eliminado.", false);
