@@ -16,7 +16,7 @@
         <img src="imagenes/logo1.png" alt="Logo El Maizal">
         <div class="title">
           <strong>El Maizal</strong>
-          <span>Pagos (Colaboradores)</span>
+          <span>Pagos (Personal)</span>
         </div>
       </div>
 
@@ -36,113 +36,95 @@
     </section>
 
     <section class="card">
-      <h1>Registrar pago a colaborador</h1>
+      <h1>Nómina semanal</h1>
 
-      <form id="formPago" class="form">
-        <div class="field">
+      <div class="filters" style="margin-top:10px;">
+        <div class="field" style="min-width:220px;">
           <label>Sucursal</label>
-          <select id="sucursal" required>
-            <option value="">Cargando sucursales...</option>
+          <select id="filtroSucursalNomina">
+            <option value="todas">Cargando sucursales...</option>
           </select>
         </div>
 
-        <div class="field">
-          <label>Colaborador</label>
-          <select id="colaborador" required>
-            <option value="">Selecciona sucursal primero...</option>
+        <div class="field" style="min-width:220px;">
+          <label>Rol</label>
+          <select id="filtroRolNomina">
+            <option value="todos">Todos</option>
+            <option value="Empleado">Empleado</option>
+            <option value="Encargado">Encargado</option>
+            <option value="Repartidor">Repartidor</option>
+            <option value="Otro">Otro</option>
           </select>
         </div>
 
-        <div class="field">
-          <label>Fecha del pago</label>
-          <input type="date" id="fechaPago" required />
+        <div class="field" style="min-width:200px;">
+          <label>Semana (Lunes)</label>
+          <input type="date" id="semanaLunes" />
         </div>
 
-        <div class="field">
-          <label>Días trabajados</label>
-          <input type="number" id="dias" min="0" step="1" placeholder="Ej. 7" required />
+        <div class="actions" style="gap:10px;">
+          <button class="btn-primary" id="btnCrearSemana" type="button">Crear / Abrir semana</button>
+          <button class="btn-secondary" id="btnSemanaActual" type="button">Semana actual</button>
         </div>
-
-        <div class="field">
-          <label>Pago por día ($)</label>
-          <input type="number" id="pagoDia" min="0" step="0.1" placeholder="Ej. 550" required />
-        </div>
-
-        <div class="field">
-          <label>Total calculado ($)</label>
-          <input type="number" id="totalCalculado" min="0" step="0.1" placeholder="0" />
-        </div>
-
-        <div class="field">
-          <label>Anticipo detectado ($)</label>
-          <input type="text" id="anticipoDetectado" readonly />
-        </div>
-
-        <div class="field">
-          <label>Pendiente a pagar ($)</label>
-          <input type="text" id="pendientePagar" readonly />
-        </div>
-
-        <div class="actions">
-          <button type="submit" class="btn-primary" id="btnGuardar">Registrar pago</button>
-        </div>
-
-        <p class="msg" id="msg"></p>
-      </form>
-    </section>
-
-    <section class="card">
-      <h2>Historial de pagos</h2>
-
-      <div class="filters">
-        <select id="filtroSucursal">
-          <option value="todas">Cargando sucursales...</option>
-        </select>
-
-        <input type="date" id="filtroFecha" />
-        <button class="btn-clear" id="btnClearFecha">Quitar fecha</button>
       </div>
 
-      <div class="resumen">
+      <p class="msg" id="msg"></p>
+
+      <div class="resumen" style="margin-top:14px;">
+        <div class="res-card">
+          <span>Total nómina</span>
+          <strong id="resNominaTotal">$0.00</strong>
+        </div>
+
+        <div class="res-card">
+          <span>Total / 3 sucursales</span>
+          <strong id="resNominaEntre3">$0.00</strong>
+        </div>
+
         <div class="res-card neto">
-          <span>Total pagado</span>
-          <strong id="resPagado">$0.00</strong>
+          <span>Pendiente total</span>
+          <strong id="resPendienteTotal">$0.00</strong>
         </div>
       </div>
 
-      <div class="table-wrap">
+      <div class="table-wrap" style="margin-top:14px;">
         <table>
           <thead>
             <tr>
-              <th>Fecha</th>
-              <th>Sucursal</th>
               <th>Colaborador</th>
-              <th>Días</th>
-              <th>$ / Día</th>
-              <th>Total</th>
-              <th>Anticipo</th>
+              <th>Rol</th>
+              <th>Sueldo semanal</th>
+              <th>Lun</th>
+              <th>Mar</th>
+              <th>Mié</th>
+              <th>Jue</th>
+              <th>Vie</th>
+              <th>Sáb</th>
+              <th>Dom</th>
+              <th>Bonos</th>
+              <th>Total pagado</th>
               <th>Pendiente</th>
-              <th>Acción</th>
             </tr>
           </thead>
-          <tbody id="tbodyPagos"></tbody>
+          <tbody id="tbodyNomina"></tbody>
         </table>
       </div>
+    </section>
+
+    <section class="card">
+      <h2>Historial de semanas</h2>
+
+      <div class="filters">
+        <input type="date" id="histDesde" />
+        <input type="date" id="histHasta" />
+        <button class="btn-clear" id="btnClearHist">Quitar fechas</button>
+      </div>
+
+      <div id="wrapSemanas"></div>
     </section>
   </main>
 
   <div class="loading" id="loading">Verificando sesión...</div>
-
-  <div class="modal-backdrop" id="modalBackdrop" style="display:none;">
-    <div class="modal">
-      <h3>Eliminar pago</h3>
-      <p>¿Seguro que deseas eliminar este pago?</p>
-      <div class="modal-actions">
-        <button class="btn-secondary" id="btnModalCancelar">Cancelar</button>
-        <button class="btn-danger" id="btnModalEliminar">Eliminar</button>
-      </div>
-    </div>
-  </div>
 
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
