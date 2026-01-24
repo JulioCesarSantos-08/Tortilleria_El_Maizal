@@ -30,6 +30,8 @@ const filtroRolNomina = document.getElementById("filtroRolNomina");
 const semanaLunesInput = document.getElementById("semanaLunes");
 const btnCrearSemana = document.getElementById("btnCrearSemana");
 const btnSemanaActual = document.getElementById("btnSemanaActual");
+const btnSyncSueldos = document.getElementById("btnSyncSueldos");
+const btnEliminarSemana = document.getElementById("btnEliminarSemana");
 
 const resNominaTotal = document.getElementById("resNominaTotal");
 const resNominaEntre3 = document.getElementById("resNominaEntre3");
@@ -101,12 +103,6 @@ async function addLog({ accion, detalle }) {
   } catch (e) {}
 }
 
-function getSucursalNombreById(id) {
-  if (!id) return "-";
-  const s = sucursalesMap.get(String(id));
-  return s?.nombre || "-";
-}
-
 function fillSucursalSelects() {
   filtroSucursalNomina.innerHTML = `<option value="todas">Todas</option>`;
 
@@ -170,6 +166,8 @@ function getSemanaLabel(lunesKey) {
 }
 
 function buildDefaultEmpleadoSemana(emp) {
+  const sueldoSemanal = Number(emp.sueldoSemanal || 0);
+
   const dias = {};
   DIAS.forEach((k) => {
     dias[k] = { trabajó: true, pago: 0 };
@@ -181,17 +179,17 @@ function buildDefaultEmpleadoSemana(emp) {
     rol: String(emp.rol || ""),
     sucursalId: String(emp.sucursalId || ""),
     sucursalNombre: String(emp.sucursalNombre || ""),
-    sueldoSemanal: Number(emp.sueldoSemanal || 0),
+    sueldoSemanal,
     bonos: 0,
     dias
   };
 }
 
-function getEmpleadosFiltradosParaNomina() {
+function getEmpleadosFiltradosParaVista(empleadosSemana) {
   const suc = filtroSucursalNomina.value;
   const rol = filtroRolNomina.value;
 
-  let lista = empleadosCache.map(e => ({ ...e }));
+  let lista = (empleadosSemana || []).map(e => ({ ...e }));
 
   if (rol !== "todos") {
     lista = lista.filter(e => String(e.rol || "") === String(rol));
@@ -210,6 +208,60 @@ function getEmpleadosFiltradosParaNomina() {
   return lista;
 }
 
+function getDiasTrabajados(empSemana) {
+  let count = 0;
+  DIAS.forEach((k) => {
+    if (empSemana.dias?.[k]?.trabajó === true) count++;
+  });
+  return count;
+}
+
+function calcEmpleadoSemana(empSemana) {
+  const sueldoSemanal = Number(empSemana.sueldoSemanal || 0);
+  const bonos = Number(empSemana.bonos || 0);
+
+  const diasTrabajados = getDiasTrabajados(empSemana);
+
+  const pagoPorDiaBase = sueldoSemanal > 0 ? (sueldoSemanal / 7) : 0;
+
+  let totalPagado = 0;
+  DIAS.forEach((k) => {
+    const d = empSemana.dias?.[k] || {};
+    const pago = Number(d.pago || 0);
+    totalPagado += pago;
+  });
+
+  const totalEsperado = (pagoPorDiaBase * diasTrabajados) + bonos;
+  const pendiente = Math.max(totalEsperado - totalPagado, 0);
+
+  return { totalPagado, totalEsperado, pendiente, diasTrabajados };
+}
+
+async function guardarSemanaActiva() {
+  if (!semanaActivaKey || !semanaActiva) return;
+
+  const ref = db.collection("pagosSemanas").doc(semanaActivaKey);
+
+  let totalNomina = 0;
+  let totalPendiente = 0;
+
+  (semanaActiva.empleados || []).forEach((e) => {
+    const c = calcEmpleadoSemana(e);
+    totalNomina += c.totalEsperado;
+    totalPendiente += c.pendiente;
+  });
+
+  semanaActiva.totalNomina = Number(totalNomina.toFixed(2));
+  semanaActiva.totalPendiente = Number(totalPendiente.toFixed(2));
+
+  await ref.update({
+    empleados: semanaActiva.empleados || [],
+    totalNomina: semanaActiva.totalNomina,
+    totalPendiente: semanaActiva.totalPendiente,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
 async function crearOAbrirSemana(lunesKey) {
   if (!lunesKey) return;
 
@@ -224,7 +276,7 @@ async function crearOAbrirSemana(lunesKey) {
     return;
   }
 
-  const empleados = getEmpleadosFiltradosParaNomina().map(buildDefaultEmpleadoSemana);
+  const empleados = empleadosCache.map(buildDefaultEmpleadoSemana);
 
   const payload = {
     lunesKey: String(lunesKey),
@@ -246,55 +298,64 @@ async function crearOAbrirSemana(lunesKey) {
   semanaActiva = { id: nuevoSnap.id, ...(nuevoSnap.data() || {}) };
 }
 
-function calcEmpleadoSemana(empSemana) {
-  const sueldoSemanal = Number(empSemana.sueldoSemanal || 0);
-  const bonos = Number(empSemana.bonos || 0);
+async function actualizarSueldosDesdeEmpleados() {
+  if (!semanaActiva || !semanaActivaKey) return;
 
-  let diasTrabajados = 0;
-  DIAS.forEach((k) => {
-    if (empSemana.dias?.[k]?.trabajó === true) diasTrabajados++;
+  const map = new Map();
+  empleadosCache.forEach((e) => {
+    map.set(String(e.id), e);
   });
 
-  const pagoPorDiaBase = sueldoSemanal > 0 ? (sueldoSemanal / 7) : 0;
+  let cambios = 0;
 
-  let totalPagado = 0;
-  DIAS.forEach((k) => {
-    const d = empSemana.dias?.[k] || {};
-    const trabajó = d.trabajó === true;
-    const pago = Number(d.pago || 0);
-    if (trabajó) totalPagado += pago;
+  (semanaActiva.empleados || []).forEach((e) => {
+    const real = map.get(String(e.empleadoId));
+    if (!real) return;
+
+    const nuevoSueldo = Number(real.sueldoSemanal || 0);
+
+    if (Number(e.sueldoSemanal || 0) !== nuevoSueldo) {
+      e.sueldoSemanal = nuevoSueldo;
+      cambios++;
+    }
+
+    if (String(e.nombre || "") !== String(real.nombre || "")) e.nombre = String(real.nombre || "");
+    if (String(e.rol || "") !== String(real.rol || "")) e.rol = String(real.rol || "");
+    if (String(e.sucursalId || "") !== String(real.sucursalId || "")) e.sucursalId = String(real.sucursalId || "");
+    if (String(e.sucursalNombre || "") !== String(real.sucursalNombre || "")) e.sucursalNombre = String(real.sucursalNombre || "");
   });
 
-  const totalEsperado = (pagoPorDiaBase * diasTrabajados) + bonos;
-  const pendiente = Math.max(totalEsperado - totalPagado, 0);
+  await guardarSemanaActiva();
 
-  return { totalPagado, totalEsperado, pendiente, diasTrabajados, pagoPorDiaBase };
+  await addLog({
+    accion: "editar",
+    detalle: `Actualizó sueldos desde empleados en semana: ${semanaActiva.label || semanaActivaKey} | Cambios: ${cambios}`
+  });
+
+  setMsg(`Sueldos actualizados (${cambios} cambios).`, false);
+  renderNomina();
 }
 
-async function guardarSemanaActiva() {
+async function eliminarSemanaActiva() {
   if (!semanaActivaKey || !semanaActiva) return;
 
-  const ref = db.collection("pagosSemanas").doc(semanaActivaKey);
+  const label = semanaActiva.label || semanaActivaKey;
+  const ok = confirm(`¿Eliminar la semana "${label}"? Esta acción no se puede deshacer.`);
+  if (!ok) return;
 
-  const empleados = (semanaActiva.empleados || []).map(e => ({ ...e }));
-  let totalNomina = 0;
-  let totalPendiente = 0;
+  await db.collection("pagosSemanas").doc(semanaActivaKey).delete();
 
-  empleados.forEach((e) => {
-    const c = calcEmpleadoSemana(e);
-    totalNomina += c.totalEsperado;
-    totalPendiente += c.pendiente;
+  await addLog({
+    accion: "eliminar",
+    detalle: `Eliminó semana de nómina: ${label}`
   });
 
-  semanaActiva.totalNomina = Number(totalNomina.toFixed(2));
-  semanaActiva.totalPendiente = Number(totalPendiente.toFixed(2));
+  semanaActivaKey = null;
+  semanaActiva = null;
 
-  await ref.update({
-    empleados: semanaActiva.empleados || [],
-    totalNomina: semanaActiva.totalNomina,
-    totalPendiente: semanaActiva.totalPendiente,
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-  });
+  setMsg("Semana eliminada.", false);
+  tbodyNomina.innerHTML = `<tr><td colspan="14" style="padding:12px;font-weight:900;color:#555;">Semana eliminada. Crea o abre otra.</td></tr>`;
+  renderResumenSemana();
 }
 
 function renderResumenSemana() {
@@ -305,12 +366,10 @@ function renderResumenSemana() {
     return;
   }
 
-  const empleados = semanaActiva.empleados || [];
-
   let totalNomina = 0;
   let totalPendiente = 0;
 
-  empleados.forEach((e) => {
+  (semanaActiva.empleados || []).forEach((e) => {
     const c = calcEmpleadoSemana(e);
     totalNomina += c.totalEsperado;
     totalPendiente += c.pendiente;
@@ -325,26 +384,29 @@ function renderNomina() {
   tbodyNomina.innerHTML = "";
 
   if (!semanaActiva) {
-    tbodyNomina.innerHTML = `<tr><td colspan="13" style="padding:12px;font-weight:900;color:#555;">Crea o abre una semana para comenzar.</td></tr>`;
+    tbodyNomina.innerHTML = `<tr><td colspan="14" style="padding:12px;font-weight:900;color:#555;">Crea o abre una semana para comenzar.</td></tr>`;
     renderResumenSemana();
     return;
   }
 
-  const empleados = semanaActiva.empleados || [];
-  if (!empleados.length) {
-    tbodyNomina.innerHTML = `<tr><td colspan="13" style="padding:12px;font-weight:900;color:#555;">Sin colaboradores en esta semana.</td></tr>`;
+  const empleadosVista = getEmpleadosFiltradosParaVista(semanaActiva.empleados || []);
+
+  if (!empleadosVista.length) {
+    tbodyNomina.innerHTML = `<tr><td colspan="14" style="padding:12px;font-weight:900;color:#555;">Sin colaboradores para estos filtros.</td></tr>`;
     renderResumenSemana();
     return;
   }
 
-  empleados.sort((a, b) => String(a.nombre || "").localeCompare(String(b.nombre || "")));
+  empleadosVista.forEach((e) => {
+    const realIdx = (semanaActiva.empleados || []).findIndex(x => String(x.empleadoId) === String(e.empleadoId));
+    if (realIdx === -1) return;
 
-  empleados.forEach((e, idx) => {
     const nombre = escapeHtml(e.nombre || "");
     const rol = escapeHtml(e.rol || "");
     const sueldo = Number(e.sueldoSemanal || 0);
 
     const c = calcEmpleadoSemana(e);
+    const diasTxt = `${c.diasTrabajados}/7`;
 
     let diasHtml = "";
     DIAS.forEach((k) => {
@@ -356,10 +418,10 @@ function renderNomina() {
         <td>
           <div style="display:flex;flex-direction:column;gap:6px;min-width:86px;">
             <label style="display:flex;align-items:center;gap:6px;font-weight:800;font-size:.82rem;color:#333;">
-              <input type="checkbox" data-work="${idx}|${k}" ${checked} />
+              <input type="checkbox" data-work="${realIdx}|${k}" ${checked} />
               ${DIAS_LABEL[k]}
             </label>
-            <input type="number" min="0" step="0.01" data-pay="${idx}|${k}" value="${val ? String(val) : ""}" placeholder="$0" style="padding:8px;border-radius:10px;border:1px solid #ddd;font-weight:800;" />
+            <input type="number" min="0" step="0.01" data-pay="${realIdx}|${k}" value="${val ? String(val) : ""}" placeholder="$0" style="padding:8px;border-radius:10px;border:1px solid #ddd;font-weight:800;" />
           </div>
         </td>
       `;
@@ -370,9 +432,10 @@ function renderNomina() {
         <td style="font-weight:900;">${nombre}</td>
         <td>${rol}</td>
         <td>${formatMoney(sueldo)}</td>
+        <td style="font-weight:900;">${diasTxt}</td>
         ${diasHtml}
         <td>
-          <input type="number" min="0" step="0.01" data-bono="${idx}" value="${Number(e.bonos || 0) ? String(Number(e.bonos || 0)) : ""}" placeholder="$0" style="padding:8px;border-radius:10px;border:1px solid #ddd;font-weight:800;min-width:90px;" />
+          <input type="number" min="0" step="0.01" data-bono="${realIdx}" value="${Number(e.bonos || 0) ? String(Number(e.bonos || 0)) : ""}" placeholder="$0" style="padding:8px;border-radius:10px;border:1px solid #ddd;font-weight:800;min-width:90px;" />
         </td>
         <td style="font-weight:900;">${formatMoney(c.totalPagado)}</td>
         <td style="font-weight:900;color:${c.pendiente > 0 ? "#b00020" : "#1f8a4c"};">${formatMoney(c.pendiente)}</td>
@@ -481,6 +544,9 @@ function renderHistorial() {
     wrapSemanas.innerHTML += `
       <section class="card" style="margin-top:14px;">
         <h3 style="margin-bottom:10px;">Semana: ${label}</h3>
+        <div class="actions" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+          <button class="btn-secondary" data-open="${escapeHtml(String(s.lunesKey || ""))}" type="button">Abrir semana</button>
+        </div>
         <div class="resumen" style="margin-top:10px;">
           <div class="res-card">
             <span>Total nómina</span>
@@ -493,6 +559,18 @@ function renderHistorial() {
         </div>
       </section>
     `;
+  });
+
+  document.querySelectorAll("[data-open]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const lunesKey = btn.getAttribute("data-open");
+      if (!lunesKey) return;
+      semanaLunesInput.value = lunesKey;
+      await crearOAbrirSemana(lunesKey);
+      setMsg(`Semana activa: ${getSemanaLabel(lunesKey)}`, false);
+      renderNomina();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
   });
 }
 
@@ -581,15 +659,23 @@ btnCrearSemana.addEventListener("click", async () => {
   renderNomina();
 });
 
-filtroSucursalNomina.addEventListener("change", async () => {
+btnSyncSueldos.addEventListener("click", async () => {
   setMsg("");
-  if (!semanaActiva) return;
+  await actualizarSueldosDesdeEmpleados();
+});
+
+btnEliminarSemana.addEventListener("click", async () => {
+  setMsg("");
+  await eliminarSemanaActiva();
+});
+
+filtroSucursalNomina.addEventListener("change", () => {
+  setMsg("");
   renderNomina();
 });
 
-filtroRolNomina.addEventListener("change", async () => {
+filtroRolNomina.addEventListener("change", () => {
   setMsg("");
-  if (!semanaActiva) return;
   renderNomina();
 });
 
