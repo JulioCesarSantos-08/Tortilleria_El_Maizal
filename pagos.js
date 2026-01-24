@@ -21,40 +21,38 @@ const btnBack = document.getElementById("btnBack");
 const btnGoVentas = document.getElementById("btnGoVentas");
 const btnGoGastos = document.getElementById("btnGoGastos");
 const btnGoEgresos = document.getElementById("btnGoEgresos");
-const btnGoPagos = document.getElementById("btnGoPagos");
 const btnLogout = document.getElementById("btnLogout");
 
-const formPago = document.getElementById("formPago");
-const sucursalSelect = document.getElementById("sucursal");
-const colaboradorSelect = document.getElementById("colaborador");
-const fechaPagoInput = document.getElementById("fechaPago");
-
-const diasInput = document.getElementById("dias");
-const pagoDiaInput = document.getElementById("pagoDia");
-const totalCalculadoInput = document.getElementById("totalCalculado");
-
-const anticipoDetectadoInput = document.getElementById("anticipoDetectado");
-const pendientePagarInput = document.getElementById("pendientePagar");
-
 const msg = document.getElementById("msg");
-const btnGuardar = document.getElementById("btnGuardar");
 
-const filtroSucursal = document.getElementById("filtroSucursal");
-const filtroFecha = document.getElementById("filtroFecha");
-const btnClearFecha = document.getElementById("btnClearFecha");
+const filtroSucursalNomina = document.getElementById("filtroSucursalNomina");
+const filtroRolNomina = document.getElementById("filtroRolNomina");
+const semanaLunesInput = document.getElementById("semanaLunes");
+const btnCrearSemana = document.getElementById("btnCrearSemana");
+const btnSemanaActual = document.getElementById("btnSemanaActual");
 
-const tbodyPagos = document.getElementById("tbodyPagos");
-const resPagado = document.getElementById("resPagado");
+const resNominaTotal = document.getElementById("resNominaTotal");
+const resNominaEntre3 = document.getElementById("resNominaEntre3");
+const resPendienteTotal = document.getElementById("resPendienteTotal");
 
-const modalBackdrop = document.getElementById("modalBackdrop");
-const btnModalCancelar = document.getElementById("btnModalCancelar");
-const btnModalEliminar = document.getElementById("btnModalEliminar");
+const tbodyNomina = document.getElementById("tbodyNomina");
 
-let deleteId = null;
-let pagosCache = [];
+const histDesde = document.getElementById("histDesde");
+const histHasta = document.getElementById("histHasta");
+const btnClearHist = document.getElementById("btnClearHist");
+const wrapSemanas = document.getElementById("wrapSemanas");
+
 let msgTimer = null;
 
 let sucursalesMap = new Map();
+let empleadosCache = [];
+let semanasCache = [];
+
+let semanaActivaKey = null;
+let semanaActiva = null;
+
+const DIAS = ["lun", "mar", "mie", "jue", "vie", "sab", "dom"];
+const DIAS_LABEL = { lun: "Lun", mar: "Mar", mie: "Mié", jue: "Jue", vie: "Vie", sab: "Sáb", dom: "Dom" };
 
 function setMsg(text = "", isError = true, autoClear = true) {
   msg.style.color = isError ? "#b00020" : "#1f8a4c";
@@ -73,13 +71,6 @@ function formatMoney(n) {
   return "$" + Number(n || 0).toLocaleString("es-MX", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
-  });
-}
-
-function formatNumber(n, decimals = 2) {
-  return Number(n || 0).toLocaleString("es-MX", {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals
   });
 }
 
@@ -117,20 +108,7 @@ function getSucursalNombreById(id) {
 }
 
 function fillSucursalSelects() {
-  sucursalSelect.innerHTML = `<option value="">Selecciona sucursal</option>`;
-  filtroSucursal.innerHTML = `<option value="todas">Todas</option>`;
-
-  const sucActivas = Array.from(sucursalesMap.entries())
-    .map(([id, data]) => ({ id, ...data }))
-    .filter(s => s.activa === true)
-    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
-
-  sucActivas.forEach((s) => {
-    const opt = document.createElement("option");
-    opt.value = s.id;
-    opt.textContent = s.nombre || "Sin nombre";
-    sucursalSelect.appendChild(opt);
-  });
+  filtroSucursalNomina.innerHTML = `<option value="todas">Todas</option>`;
 
   const sucTodas = Array.from(sucursalesMap.entries())
     .map(([id, data]) => ({ id, ...data }))
@@ -140,7 +118,7 @@ function fillSucursalSelects() {
     const opt = document.createElement("option");
     opt.value = s.id;
     opt.textContent = `${s.nombre || "Sin nombre"}${s.activa ? "" : " (Inactiva)"}`;
-    filtroSucursal.appendChild(opt);
+    filtroSucursalNomina.appendChild(opt);
   });
 }
 
@@ -163,173 +141,374 @@ function escucharSucursales() {
     });
 }
 
-async function cargarColaboradoresPorSucursalId(sucursalId) {
-  colaboradorSelect.innerHTML = `<option value="">Selecciona colaborador</option>`;
-  if (!sucursalId) return;
-
-  const snap = await db
-    .collection("empleados")
-    .where("sucursalId", "==", String(sucursalId))
-    .get();
-
-  snap.forEach((doc) => {
-    const data = doc.data() || {};
-    const option = document.createElement("option");
-    option.value = doc.id;
-    option.textContent = `${data.nombre || "Sin nombre"} (${data.rol || "Sin rol"})`;
-    colaboradorSelect.appendChild(option);
-  });
+function getMondayOfWeek(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = (day === 0 ? -6 : 1) - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
-let lastEdited = "dias";
-
-function getTotalCalculado() {
-  const dias = Number(diasInput.value || 0);
-  const pagoDia = Number(pagoDiaInput.value || 0);
-  return dias * pagoDia;
+function toFechaKey(date) {
+  return new Date(date).toLocaleDateString("sv-SE");
 }
 
-function getDiasFromTotal(total) {
-  const pagoDia = Number(pagoDiaInput.value || 0);
-  if (pagoDia <= 0) return 0;
-  return total / pagoDia;
+function getSemanaKeyByMondayKey(lunesKey) {
+  return `semana_${String(lunesKey || "")}`;
 }
 
-function recalcularTotalYExtras() {
-  const total = getTotalCalculado();
-  totalCalculadoInput.value = total > 0 ? String(total.toFixed(2)) : "";
-  recalcularAnticipoYPendiente();
+function getSemanaLabel(lunesKey) {
+  if (!lunesKey) return "-";
+  const lunes = new Date(lunesKey + "T00:00:00");
+  const domingo = new Date(lunes);
+  domingo.setDate(domingo.getDate() + 6);
+
+  const l = lunes.toLocaleDateString("es-MX");
+  const d = domingo.toLocaleDateString("es-MX");
+  return `${l} - ${d}`;
 }
 
-function recalcularDiasDesdeTotal() {
-  const total = Number(totalCalculadoInput.value || 0);
-  const dias = getDiasFromTotal(total);
-  diasInput.value = dias > 0 ? String(dias.toFixed(2)) : "";
-  recalcularAnticipoYPendiente();
-}
-
-async function getAnticiposDetectados({ sucursalId, colaboradorId, fechaKey }) {
-  if (!sucursalId || !colaboradorId || !fechaKey) return 0;
-
-  const snap = await db.collection("gastos")
-    .where("sucursalId", "==", String(sucursalId))
-    .where("categoria", "==", "Trabajadores")
-    .where("colaboradorId", "==", String(colaboradorId))
-    .where("fechaKey", "==", String(fechaKey))
-    .where("esAnticipo", "==", true)
-    .get();
-
-  if (snap.empty) return 0;
-
-  let total = 0;
-  snap.forEach((doc) => {
-    const data = doc.data() || {};
-    total += Number(data.totalPesos || 0);
+function buildDefaultEmpleadoSemana(emp) {
+  const dias = {};
+  DIAS.forEach((k) => {
+    dias[k] = { trabajó: true, pago: 0 };
   });
 
-  return total;
+  return {
+    empleadoId: String(emp.id),
+    nombre: String(emp.nombre || "Sin nombre"),
+    rol: String(emp.rol || ""),
+    sucursalId: String(emp.sucursalId || ""),
+    sucursalNombre: String(emp.sucursalNombre || ""),
+    sueldoSemanal: Number(emp.sueldoSemanal || 0),
+    bonos: 0,
+    dias
+  };
 }
 
-async function recalcularAnticipoYPendiente() {
-  const sucursalId = sucursalSelect.value;
-  const colaboradorId = colaboradorSelect.value;
-  const fechaKey = fechaPagoInput.value;
+function getEmpleadosFiltradosParaNomina() {
+  const suc = filtroSucursalNomina.value;
+  const rol = filtroRolNomina.value;
 
-  const totalCalc = Number(totalCalculadoInput.value || 0);
+  let lista = empleadosCache.map(e => ({ ...e }));
 
-  anticipoDetectadoInput.value = "Cargando...";
-  pendientePagarInput.value = "Cargando...";
-
-  try {
-    const anticipo = await getAnticiposDetectados({ sucursalId, colaboradorId, fechaKey });
-    const pendiente = Math.max(totalCalc - anticipo, 0);
-
-    anticipoDetectadoInput.value = formatMoney(anticipo);
-    pendientePagarInput.value = formatMoney(pendiente);
-  } catch (e) {
-    anticipoDetectadoInput.value = formatMoney(0);
-    pendientePagarInput.value = formatMoney(totalCalc);
+  if (rol !== "todos") {
+    lista = lista.filter(e => String(e.rol || "") === String(rol));
   }
-}
-
-function getPagosFiltrados() {
-  const suc = filtroSucursal.value;
-  const fecha = filtroFecha.value;
-
-  let lista = [...pagosCache];
 
   if (suc !== "todas") {
-    lista = lista.filter(p => String(p.sucursalId || "") === String(suc));
+    lista = lista.filter(e => {
+      const r = String(e.rol || "");
+      if (r === "Repartidor") return String(e.sucursalId || "") === String(suc);
+      if (r === "Encargado") return String(e.sucursalId || "") === String(suc);
+      return true;
+    });
   }
 
-  if (fecha) {
-    lista = lista.filter(p => String(p.fechaKey || "") === String(fecha));
-  }
-
+  lista.sort((a, b) => String(a.nombre || "").localeCompare(String(b.nombre || "")));
   return lista;
 }
 
-function renderResumen() {
-  const lista = getPagosFiltrados();
-  const total = lista.reduce((acc, p) => acc + Number(p.pendiente || 0), 0);
-  resPagado.textContent = formatMoney(total);
+async function crearOAbrirSemana(lunesKey) {
+  if (!lunesKey) return;
+
+  const key = getSemanaKeyByMondayKey(lunesKey);
+  semanaActivaKey = key;
+
+  const ref = db.collection("pagosSemanas").doc(key);
+  const snap = await ref.get();
+
+  if (snap.exists) {
+    semanaActiva = { id: snap.id, ...(snap.data() || {}) };
+    return;
+  }
+
+  const empleados = getEmpleadosFiltradosParaNomina().map(buildDefaultEmpleadoSemana);
+
+  const payload = {
+    lunesKey: String(lunesKey),
+    label: String(getSemanaLabel(lunesKey)),
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    empleados,
+    totalNomina: 0,
+    totalPendiente: 0
+  };
+
+  await ref.set(payload);
+
+  await addLog({
+    accion: "crear",
+    detalle: `Creó semana de nómina: ${payload.label}`
+  });
+
+  const nuevoSnap = await ref.get();
+  semanaActiva = { id: nuevoSnap.id, ...(nuevoSnap.data() || {}) };
 }
 
-function abrirModalEliminar(id) {
-  deleteId = id;
-  modalBackdrop.style.display = "flex";
+function calcEmpleadoSemana(empSemana) {
+  const sueldoSemanal = Number(empSemana.sueldoSemanal || 0);
+  const bonos = Number(empSemana.bonos || 0);
+
+  let diasTrabajados = 0;
+  DIAS.forEach((k) => {
+    if (empSemana.dias?.[k]?.trabajó === true) diasTrabajados++;
+  });
+
+  const pagoPorDiaBase = sueldoSemanal > 0 ? (sueldoSemanal / 7) : 0;
+
+  let totalPagado = 0;
+  DIAS.forEach((k) => {
+    const d = empSemana.dias?.[k] || {};
+    const trabajó = d.trabajó === true;
+    const pago = Number(d.pago || 0);
+    if (trabajó) totalPagado += pago;
+  });
+
+  const totalEsperado = (pagoPorDiaBase * diasTrabajados) + bonos;
+  const pendiente = Math.max(totalEsperado - totalPagado, 0);
+
+  return { totalPagado, totalEsperado, pendiente, diasTrabajados, pagoPorDiaBase };
 }
 
-function cerrarModalEliminar() {
-  deleteId = null;
-  modalBackdrop.style.display = "none";
+async function guardarSemanaActiva() {
+  if (!semanaActivaKey || !semanaActiva) return;
+
+  const ref = db.collection("pagosSemanas").doc(semanaActivaKey);
+
+  const empleados = (semanaActiva.empleados || []).map(e => ({ ...e }));
+  let totalNomina = 0;
+  let totalPendiente = 0;
+
+  empleados.forEach((e) => {
+    const c = calcEmpleadoSemana(e);
+    totalNomina += c.totalEsperado;
+    totalPendiente += c.pendiente;
+  });
+
+  semanaActiva.totalNomina = Number(totalNomina.toFixed(2));
+  semanaActiva.totalPendiente = Number(totalPendiente.toFixed(2));
+
+  await ref.update({
+    empleados: semanaActiva.empleados || [],
+    totalNomina: semanaActiva.totalNomina,
+    totalPendiente: semanaActiva.totalPendiente,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
 }
 
-function renderTabla() {
-  const lista = getPagosFiltrados();
-  tbodyPagos.innerHTML = "";
+function renderResumenSemana() {
+  if (!semanaActiva) {
+    resNominaTotal.textContent = formatMoney(0);
+    resNominaEntre3.textContent = formatMoney(0);
+    resPendienteTotal.textContent = formatMoney(0);
+    return;
+  }
 
-  lista.forEach((p) => {
-    const fecha = p.createdAt?.toDate ? p.createdAt.toDate() : null;
-    const fechaTxt = fecha ? fecha.toLocaleString("es-MX") : "-";
+  const empleados = semanaActiva.empleados || [];
 
-    const sucNombre = p.sucursalNombre || getSucursalNombreById(p.sucursalId);
-    const sucTxt = escapeHtml(sucNombre || "-");
+  let totalNomina = 0;
+  let totalPendiente = 0;
 
-    const colTxt = escapeHtml(p.colaboradorNombre || "-");
+  empleados.forEach((e) => {
+    const c = calcEmpleadoSemana(e);
+    totalNomina += c.totalEsperado;
+    totalPendiente += c.pendiente;
+  });
 
-    const dias = formatNumber(p.dias || 0, 2);
-    const pagoDia = formatNumber(p.pagoDia || 0, 2);
-    const totalCalc = formatNumber(p.totalCalculado || 0, 2);
-    const anticipo = formatNumber(p.anticipo || 0, 2);
-    const pendiente = formatNumber(p.pendiente || 0, 2);
+  resNominaTotal.textContent = formatMoney(totalNomina);
+  resNominaEntre3.textContent = formatMoney(totalNomina / 3);
+  resPendienteTotal.textContent = formatMoney(totalPendiente);
+}
 
-    tbodyPagos.innerHTML += `
+function renderNomina() {
+  tbodyNomina.innerHTML = "";
+
+  if (!semanaActiva) {
+    tbodyNomina.innerHTML = `<tr><td colspan="13" style="padding:12px;font-weight:900;color:#555;">Crea o abre una semana para comenzar.</td></tr>`;
+    renderResumenSemana();
+    return;
+  }
+
+  const empleados = semanaActiva.empleados || [];
+  if (!empleados.length) {
+    tbodyNomina.innerHTML = `<tr><td colspan="13" style="padding:12px;font-weight:900;color:#555;">Sin colaboradores en esta semana.</td></tr>`;
+    renderResumenSemana();
+    return;
+  }
+
+  empleados.sort((a, b) => String(a.nombre || "").localeCompare(String(b.nombre || "")));
+
+  empleados.forEach((e, idx) => {
+    const nombre = escapeHtml(e.nombre || "");
+    const rol = escapeHtml(e.rol || "");
+    const sueldo = Number(e.sueldoSemanal || 0);
+
+    const c = calcEmpleadoSemana(e);
+
+    let diasHtml = "";
+    DIAS.forEach((k) => {
+      const d = e.dias?.[k] || { trabajó: true, pago: 0 };
+      const checked = d.trabajó === true ? "checked" : "";
+      const val = Number(d.pago || 0);
+
+      diasHtml += `
+        <td>
+          <div style="display:flex;flex-direction:column;gap:6px;min-width:86px;">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:800;font-size:.82rem;color:#333;">
+              <input type="checkbox" data-work="${idx}|${k}" ${checked} />
+              ${DIAS_LABEL[k]}
+            </label>
+            <input type="number" min="0" step="0.01" data-pay="${idx}|${k}" value="${val ? String(val) : ""}" placeholder="$0" style="padding:8px;border-radius:10px;border:1px solid #ddd;font-weight:800;" />
+          </div>
+        </td>
+      `;
+    });
+
+    tbodyNomina.innerHTML += `
       <tr>
-        <td>${escapeHtml(fechaTxt)}</td>
-        <td>${sucTxt}</td>
-        <td>${colTxt}</td>
-        <td>${dias}</td>
-        <td>$${pagoDia}</td>
-        <td>$${totalCalc}</td>
-        <td>$${anticipo}</td>
-        <td><strong>$${pendiente}</strong></td>
-        <td><button class="btn-mini" data-del="${p.id}">Eliminar</button></td>
+        <td style="font-weight:900;">${nombre}</td>
+        <td>${rol}</td>
+        <td>${formatMoney(sueldo)}</td>
+        ${diasHtml}
+        <td>
+          <input type="number" min="0" step="0.01" data-bono="${idx}" value="${Number(e.bonos || 0) ? String(Number(e.bonos || 0)) : ""}" placeholder="$0" style="padding:8px;border-radius:10px;border:1px solid #ddd;font-weight:800;min-width:90px;" />
+        </td>
+        <td style="font-weight:900;">${formatMoney(c.totalPagado)}</td>
+        <td style="font-weight:900;color:${c.pendiente > 0 ? "#b00020" : "#1f8a4c"};">${formatMoney(c.pendiente)}</td>
       </tr>
     `;
   });
 
-  document.querySelectorAll("[data-del]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const id = btn.getAttribute("data-del");
-      abrirModalEliminar(id);
+  document.querySelectorAll("[data-work]").forEach((el) => {
+    el.addEventListener("change", async () => {
+      const raw = el.getAttribute("data-work") || "";
+      const [idxStr, dia] = raw.split("|");
+      const idx = Number(idxStr);
+
+      const emp = semanaActiva.empleados?.[idx];
+      if (!emp) return;
+
+      const trabajó = el.checked === true;
+
+      if (!emp.dias) emp.dias = {};
+      if (!emp.dias[dia]) emp.dias[dia] = { trabajó: true, pago: 0 };
+
+      emp.dias[dia].trabajó = trabajó;
+
+      if (!trabajó) {
+        emp.dias[dia].pago = 0;
+        const inputPago = document.querySelector(`[data-pay="${idx}|${dia}"]`);
+        if (inputPago) inputPago.value = "";
+      }
+
+      await guardarSemanaActiva();
+      renderNomina();
     });
+  });
+
+  document.querySelectorAll("[data-pay]").forEach((el) => {
+    el.addEventListener("input", async () => {
+      const raw = el.getAttribute("data-pay") || "";
+      const [idxStr, dia] = raw.split("|");
+      const idx = Number(idxStr);
+
+      const emp = semanaActiva.empleados?.[idx];
+      if (!emp) return;
+
+      const val = Number(el.value || 0);
+
+      if (!emp.dias) emp.dias = {};
+      if (!emp.dias[dia]) emp.dias[dia] = { trabajó: true, pago: 0 };
+
+      emp.dias[dia].pago = val;
+
+      await guardarSemanaActiva();
+      renderNomina();
+    });
+  });
+
+  document.querySelectorAll("[data-bono]").forEach((el) => {
+    el.addEventListener("input", async () => {
+      const idx = Number(el.getAttribute("data-bono") || "0");
+      const emp = semanaActiva.empleados?.[idx];
+      if (!emp) return;
+
+      emp.bonos = Number(el.value || 0);
+
+      await guardarSemanaActiva();
+      renderNomina();
+    });
+  });
+
+  renderResumenSemana();
+}
+
+function isSemanaEnRango(lunesKey, desde, hasta) {
+  const f = String(lunesKey || "");
+  const d = String(desde || "");
+  const h = String(hasta || "");
+
+  if (d && f < d) return false;
+  if (h && f > h) return false;
+  return true;
+}
+
+function renderHistorial() {
+  wrapSemanas.innerHTML = "";
+
+  const desde = histDesde.value;
+  const hasta = histHasta.value;
+
+  let lista = [...semanasCache];
+
+  if (desde || hasta) {
+    lista = lista.filter(s => isSemanaEnRango(s.lunesKey, desde, hasta));
+  }
+
+  if (!lista.length) {
+    wrapSemanas.innerHTML = `<p style="margin-top:10px;font-weight:900;color:#555;">Sin semanas registradas.</p>`;
+    return;
+  }
+
+  lista.sort((a, b) => String(b.lunesKey || "").localeCompare(String(a.lunesKey || "")));
+
+  lista.forEach((s) => {
+    const label = escapeHtml(s.label || getSemanaLabel(s.lunesKey));
+    const total = formatMoney(Number(s.totalNomina || 0));
+    const pendiente = formatMoney(Number(s.totalPendiente || 0));
+
+    wrapSemanas.innerHTML += `
+      <section class="card" style="margin-top:14px;">
+        <h3 style="margin-bottom:10px;">Semana: ${label}</h3>
+        <div class="resumen" style="margin-top:10px;">
+          <div class="res-card">
+            <span>Total nómina</span>
+            <strong>${total}</strong>
+          </div>
+          <div class="res-card neto">
+            <span>Pendiente total</span>
+            <strong>${pendiente}</strong>
+          </div>
+        </div>
+      </section>
+    `;
   });
 }
 
 function renderTodo() {
-  renderTabla();
-  renderResumen();
+  renderNomina();
+  renderHistorial();
+}
+
+async function abrirSemanaActual() {
+  const hoy = new Date();
+  const lunes = getMondayOfWeek(hoy);
+  const lunesKey = toFechaKey(lunes);
+  semanaLunesInput.value = lunesKey;
+  await crearOAbrirSemana(lunesKey);
+  setMsg(`Semana activa: ${getSemanaLabel(lunesKey)}`, false);
+  renderNomina();
 }
 
 auth.onAuthStateChanged((user) => {
@@ -344,16 +523,22 @@ auth.onAuthStateChanged((user) => {
 
   escucharSucursales();
 
-  db.collection("pagos")
-    .orderBy("createdAt", "desc")
-    .limit(1000)
+  db.collection("empleados")
+    .orderBy("nombre", "asc")
     .onSnapshot((snapshot) => {
-      pagosCache = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-      renderTodo();
+      empleadosCache = snapshot.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
+      if (!semanaActiva) renderNomina();
     });
 
-  const hoy = new Date().toLocaleDateString("sv-SE");
-  fechaPagoInput.value = hoy;
+  db.collection("pagosSemanas")
+    .orderBy("lunesKey", "desc")
+    .limit(200)
+    .onSnapshot((snapshot) => {
+      semanasCache = snapshot.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
+      renderHistorial();
+    });
+
+  abrirSemanaActual();
 });
 
 btnBack.addEventListener("click", () => {
@@ -377,167 +562,42 @@ btnLogout.addEventListener("click", async () => {
   window.location.href = "index.html";
 });
 
-sucursalSelect.addEventListener("change", async () => {
+btnSemanaActual.addEventListener("click", async () => {
   setMsg("");
-  await cargarColaboradoresPorSucursalId(sucursalSelect.value);
-  recalcularAnticipoYPendiente();
+  await abrirSemanaActual();
 });
 
-colaboradorSelect.addEventListener("change", () => {
-  setMsg("");
-  recalcularAnticipoYPendiente();
-});
-
-fechaPagoInput.addEventListener("change", () => {
-  setMsg("");
-  recalcularAnticipoYPendiente();
-});
-
-diasInput.addEventListener("input", () => {
-  setMsg("");
-  lastEdited = "dias";
-  recalcularTotalYExtras();
-});
-
-pagoDiaInput.addEventListener("input", () => {
-  setMsg("");
-  if (lastEdited === "total") {
-    recalcularDiasDesdeTotal();
-  } else {
-    recalcularTotalYExtras();
-  }
-});
-
-totalCalculadoInput.addEventListener("input", () => {
-  setMsg("");
-  lastEdited = "total";
-  recalcularDiasDesdeTotal();
-});
-
-filtroSucursal.addEventListener("change", renderTodo);
-filtroFecha.addEventListener("change", renderTodo);
-
-btnClearFecha.addEventListener("click", () => {
-  filtroFecha.value = "";
-  renderTodo();
-});
-
-formPago.addEventListener("submit", async (e) => {
-  e.preventDefault();
+btnCrearSemana.addEventListener("click", async () => {
   setMsg("");
 
-  const sucursalId = sucursalSelect.value;
-  const sucursalNombre = getSucursalNombreById(sucursalId);
-
-  const colaboradorId = colaboradorSelect.value;
-  const colaboradorNombre = colaboradorSelect.options[colaboradorSelect.selectedIndex]?.textContent || "";
-
-  const fechaKey = fechaPagoInput.value;
-
-  const dias = Number(diasInput.value || 0);
-  const pagoDia = Number(pagoDiaInput.value || 0);
-  const totalCalculado = Number(totalCalculadoInput.value || 0);
-
-  if (!sucursalId || !colaboradorId || !fechaKey) {
-    setMsg("Completa sucursal, colaborador y fecha.");
+  const lunesKey = semanaLunesInput.value;
+  if (!lunesKey) {
+    setMsg("Selecciona el lunes de la semana.");
     return;
   }
 
-  const sucObj = sucursalesMap.get(String(sucursalId));
-  if (!sucObj || sucObj.activa !== true) {
-    setMsg("Esa sucursal está inactiva. Selecciona otra.");
-    return;
-  }
-
-  if (pagoDia <= 0 || totalCalculado <= 0) {
-    setMsg("Pago por día y total deben ser mayor a 0.");
-    return;
-  }
-
-  btnGuardar.disabled = true;
-
-  try {
-    const anticipo = await getAnticiposDetectados({ sucursalId, colaboradorId, fechaKey });
-    const pendiente = Math.max(totalCalculado - anticipo, 0);
-
-    await db.collection("pagos").add({
-      sucursalId: String(sucursalId),
-      sucursalNombre: String(sucursalNombre || ""),
-      colaboradorId: String(colaboradorId),
-      colaboradorNombre: String(colaboradorNombre || ""),
-      fechaKey: String(fechaKey),
-
-      dias,
-      pagoDia,
-      totalCalculado,
-      anticipo,
-      pendiente,
-
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-
-    await addLog({
-      accion: "crear",
-      detalle: `Registró pago | Sucursal: ${sucursalNombre || sucursalId} | Colaborador: ${colaboradorNombre || colaboradorId} | Fecha: ${fechaKey} | Días: ${Number(dias).toFixed(2)} | Pago/día: $${Number(pagoDia).toFixed(2)} | Total: $${Number(totalCalculado).toFixed(2)} | Anticipo: $${Number(anticipo).toFixed(2)} | Pendiente: $${Number(pendiente).toFixed(2)}`
-    });
-
-    setMsg("Pago registrado.", false);
-
-    diasInput.value = "";
-    pagoDiaInput.value = "";
-    totalCalculadoInput.value = "";
-    anticipoDetectadoInput.value = formatMoney(0);
-    pendientePagarInput.value = formatMoney(0);
-  } catch (error) {
-    setMsg("No se pudo guardar. Intenta de nuevo.");
-  } finally {
-    btnGuardar.disabled = false;
-  }
+  await crearOAbrirSemana(lunesKey);
+  setMsg(`Semana activa: ${getSemanaLabel(lunesKey)}`, false);
+  renderNomina();
 });
 
-btnModalCancelar.addEventListener("click", () => {
-  cerrarModalEliminar();
+filtroSucursalNomina.addEventListener("change", async () => {
+  setMsg("");
+  if (!semanaActiva) return;
+  renderNomina();
 });
 
-modalBackdrop.addEventListener("click", (e) => {
-  if (e.target === modalBackdrop) cerrarModalEliminar();
+filtroRolNomina.addEventListener("change", async () => {
+  setMsg("");
+  if (!semanaActiva) return;
+  renderNomina();
 });
 
-btnModalEliminar.addEventListener("click", async () => {
-  if (!deleteId) return;
+histDesde.addEventListener("change", renderHistorial);
+histHasta.addEventListener("change", renderHistorial);
 
-  btnModalEliminar.disabled = true;
-
-  try {
-    const pagoSnap = await db.collection("pagos").doc(String(deleteId)).get();
-    const before = pagoSnap.exists ? (pagoSnap.data() || {}) : null;
-
-    await db.collection("pagos").doc(deleteId).delete();
-    cerrarModalEliminar();
-
-    if (before) {
-      const sucursalNombre = before.sucursalNombre || before.sucursalId || "-";
-      const colaboradorNombre = before.colaboradorNombre || before.colaboradorId || "-";
-      const fechaKey = before.fechaKey || "-";
-
-      await addLog({
-        accion: "eliminar",
-        detalle: `Eliminó pago | Sucursal: ${sucursalNombre} | Colaborador: ${colaboradorNombre} | Fecha: ${fechaKey} | Total: $${Number(before.totalCalculado || 0).toFixed(2)} | Anticipo: $${Number(before.anticipo || 0).toFixed(2)} | Pendiente: $${Number(before.pendiente || 0).toFixed(2)}`
-      });
-    } else {
-      await addLog({
-        accion: "eliminar",
-        detalle: `Eliminó un pago (ID: ${deleteId}).`
-      });
-    }
-
-    setMsg("Pago eliminado.", false);
-  } catch (error) {
-    setMsg("No se pudo eliminar. Intenta de nuevo.");
-  } finally {
-    btnModalEliminar.disabled = false;
-  }
+btnClearHist.addEventListener("click", () => {
+  histDesde.value = "";
+  histHasta.value = "";
+  renderHistorial();
 });
-
-anticipoDetectadoInput.value = formatMoney(0);
-pendientePagarInput.value = formatMoney(0);
