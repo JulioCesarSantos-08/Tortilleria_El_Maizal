@@ -36,7 +36,7 @@
       <div class="head-row">
         <div>
           <h1>Reporte por fechas</h1>
-          <p class="sub">Aquí se muestra todo lo registrado (ventas + gastos) agrupado por día.</p>
+          <p class="sub">Aquí se muestra todo lo registrado (ventas + gastos + nómina) agrupado por día.</p>
         </div>
 
         <button class="btn-excel" id="btnExcel">Exportar a Excel</button>
@@ -62,13 +62,41 @@
           <strong id="resGastos">$0.00</strong>
         </div>
 
+        <div class="res-card">
+          <span>Total nómina</span>
+          <strong id="resNomina">$0.00</strong>
+        </div>
+
         <div class="res-card neto">
           <span>Ganancia neta</span>
           <strong id="resNeto">$0.00</strong>
         </div>
+
+        <div class="res-card">
+          <span>% margen neto</span>
+          <strong id="resMargen">0%</strong>
+        </div>
       </div>
 
       <p class="msg" id="msg"></p>
+    </section>
+
+    <section class="card">
+      <h2>Análisis por categorías (Gastos)</h2>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Categoría</th>
+              <th>Total</th>
+              <th>% de ventas</th>
+              <th>% de gastos</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyCategorias"></tbody>
+        </table>
+      </div>
     </section>
 
     <section id="contenedorFechas" class="fechas"></section>
