@@ -26,8 +26,12 @@ const btnClearFecha = document.getElementById("btnClearFecha");
 
 const resVentas = document.getElementById("resVentas");
 const resGastos = document.getElementById("resGastos");
+const resNomina = document.getElementById("resNomina");
 const resNeto = document.getElementById("resNeto");
+const resMargen = document.getElementById("resMargen");
 const msg = document.getElementById("msg");
+
+const tbodyCategorias = document.getElementById("tbodyCategorias");
 
 const contenedorFechas = document.getElementById("contenedorFechas");
 const btnExcel = document.getElementById("btnExcel");
@@ -37,8 +41,7 @@ let gastosCache = [];
 let egresosCache = [];
 let pagosCache = [];
 
-// Cache sucursales
-let sucursalesMap = new Map(); // id -> {nombre, activa}
+let sucursalesMap = new Map();
 
 function formatMoney(n) {
   return "$" + Number(n || 0).toLocaleString("es-MX", {
@@ -54,6 +57,11 @@ function formatNumber(n, decimals = 1) {
   });
 }
 
+function formatPercent(n) {
+  const v = Number(n || 0);
+  return v.toLocaleString("es-MX", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
+}
+
 function escapeHtml(text) {
   return String(text)
     .replaceAll("&", "&amp;")
@@ -67,10 +75,6 @@ function setMsg(text = "", isError = true) {
   msg.style.color = isError ? "#b00020" : "#1f8a4c";
   msg.textContent = text;
 }
-
-// ============================
-// SUCURSALES DINAMICAS
-// ============================
 
 function getSucursalNombreById(id) {
   if (!id) return "-";
@@ -88,7 +92,6 @@ function getSucursalesActivasIds() {
 function fillFiltroSucursal() {
   filtroSucursal.innerHTML = `<option value="todas">Todas</option>`;
 
-  // Mostrar todas (activas e inactivas) para consultar historial
   const sucursalesTodas = Array.from(sucursalesMap.entries())
     .map(([id, data]) => ({ id, ...data }))
     .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
@@ -120,78 +123,11 @@ function escucharSucursales() {
     });
 }
 
-// ============================
-// UTIL: ventas pagadas
-// ============================
-
 function isVentaPagada(v) {
-  // soporte por si guardaste como "pagado" o "isPaid"
   if (typeof v.pagado === "boolean") return v.pagado === true;
   if (typeof v.isPaid === "boolean") return v.isPaid === true;
-
-  // si no existe el campo, asumimos pagado para no romper reportes viejos
   return true;
 }
-
-// ============================
-// FILTROS (por sucursalId)
-// ============================
-
-function getFiltrados() {
-  const suc = filtroSucursal.value; // sucursalId
-  const fecha = filtroFecha.value;
-
-  // 1) Ventas: SOLO pagadas
-  let ventas = [...ventasCache].filter(isVentaPagada);
-
-  // 2) Gastos normales
-  let gastos = [...gastosCache];
-
-  // 3) Pagos (gasto por sucursal)
-  let pagos = [...pagosCache];
-
-  // 4) Egresos globales (se reparten)
-  let egresos = [...egresosCache];
-
-  if (suc !== "todas") {
-    ventas = ventas.filter(v => String(v.sucursalId || "") === String(suc));
-    gastos = gastos.filter(g => String(g.sucursalId || "") === String(suc));
-    pagos = pagos.filter(p => String(p.sucursalId || "") === String(suc));
-    // egresos se filtra por fecha, pero reparto se hace después
-  }
-
-  if (fecha) {
-    ventas = ventas.filter(v => String(v.fechaKey || "") === String(fecha));
-    gastos = gastos.filter(g => String(g.fechaKey || "") === String(fecha));
-    pagos = pagos.filter(p => String(p.fechaKey || "") === String(fecha));
-    egresos = egresos.filter(e => String(e.fechaKey || "") === String(fecha));
-  }
-
-  // Egresos: convertirlos en "gastos" repartidos
-  const egresosComoGastos = repartirEgresos(egresos, suc);
-
-  // Pagos: convertirlos en "gastos"
-  const pagosComoGastos = pagos.map((p) => ({
-    id: p.id,
-    fechaKey: p.fechaKey || (p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString("sv-SE") : ""),
-    sucursalId: String(p.sucursalId || ""),
-    sucursalNombre: p.sucursalNombre || getSucursalNombreById(p.sucursalId),
-    categoria: "Trabajadores",
-    descripcion: p.descripcion || p.colaboradorNombre || "Pago colaborador",
-    totalPesos: Number(p.totalPagar ?? p.totalPesos ?? p.monto ?? 0),
-    createdAt: p.createdAt || null,
-    _tipoExtra: "pago"
-  }));
-
-  // Gastos final = gastos normales + egresos + pagos
-  const gastosFinal = [...gastos, ...egresosComoGastos, ...pagosComoGastos];
-
-  return { ventas, gastos: gastosFinal };
-}
-
-// ============================
-// EGRESOS repartidos
-// ============================
 
 function repartirEgresos(egresos, sucFiltro) {
   const sucursalesActivas = getSucursalesActivasIds();
@@ -205,7 +141,6 @@ function repartirEgresos(egresos, sucFiltro) {
 
     const fechaKey = e.fechaKey || (e.createdAt?.toDate ? e.createdAt.toDate().toLocaleDateString("sv-SE") : "");
 
-    // si filtras por una sucursal, solo se agrega su parte
     if (sucFiltro !== "todas") {
       lista.push({
         id: e.id,
@@ -221,7 +156,6 @@ function repartirEgresos(egresos, sucFiltro) {
       return;
     }
 
-    // si es todas, se reparte a cada sucursal activa
     sucursalesActivas.forEach((sid) => {
       lista.push({
         id: e.id,
@@ -240,9 +174,47 @@ function repartirEgresos(egresos, sucFiltro) {
   return lista;
 }
 
-// ============================
-// AGRUPADORES
-// ============================
+function getFiltrados() {
+  const suc = filtroSucursal.value;
+  const fecha = filtroFecha.value;
+
+  let ventas = [...ventasCache].filter(isVentaPagada);
+  let gastos = [...gastosCache];
+  let pagos = [...pagosCache];
+  let egresos = [...egresosCache];
+
+  if (suc !== "todas") {
+    ventas = ventas.filter(v => String(v.sucursalId || "") === String(suc));
+    gastos = gastos.filter(g => String(g.sucursalId || "") === String(suc));
+    pagos = pagos.filter(p => String(p.sucursalId || "") === String(suc));
+  }
+
+  if (fecha) {
+    ventas = ventas.filter(v => String(v.fechaKey || "") === String(fecha));
+    gastos = gastos.filter(g => String(g.fechaKey || "") === String(fecha));
+    pagos = pagos.filter(p => String(p.fechaKey || "") === String(fecha));
+    egresos = egresos.filter(e => String(e.fechaKey || "") === String(fecha));
+  }
+
+  const egresosComoGastos = repartirEgresos(egresos, suc);
+
+  const pagosComoGastos = pagos.map((p) => ({
+    id: p.id,
+    fechaKey: p.fechaKey || (p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString("sv-SE") : ""),
+    sucursalId: String(p.sucursalId || ""),
+    sucursalNombre: p.sucursalNombre || getSucursalNombreById(p.sucursalId),
+    categoria: "Gastos de Personal",
+    descripcion: p.descripcion || p.colaboradorNombre || "Pago personal",
+    totalPesos: Number(p.totalPagar ?? p.totalPesos ?? p.monto ?? p.pendiente ?? 0),
+    createdAt: p.createdAt || null,
+    _tipoExtra: "pago"
+  }));
+
+  const gastosFinal = [...gastos, ...egresosComoGastos];
+  const nominaFinal = [...pagosComoGastos];
+
+  return { ventas, gastos: gastosFinal, nomina: nominaFinal };
+}
 
 function agruparPorFecha(lista) {
   const map = {};
@@ -258,28 +230,81 @@ function ordenarFechasAsc(keys) {
   return keys.sort((a, b) => (a > b ? 1 : -1));
 }
 
-// ============================
-// RENDER
-// ============================
+function getCategoriasResumen(gastos) {
+  const map = new Map();
 
-function renderResumen(ventas, gastos) {
+  gastos.forEach((g) => {
+    const cat = String(g.categoria || "Sin categoría").trim() || "Sin categoría";
+    const total = Number(g.totalPesos || 0);
+    if (!map.has(cat)) map.set(cat, 0);
+    map.set(cat, map.get(cat) + total);
+  });
+
+  return Array.from(map.entries())
+    .map(([categoria, total]) => ({ categoria, total }))
+    .sort((a, b) => b.total - a.total);
+}
+
+function renderCategorias(ventas, gastos) {
+  if (!tbodyCategorias) return;
+
   const totalVentas = ventas.reduce((acc, v) => acc + Number(v.totalPesos || 0), 0);
   const totalGastos = gastos.reduce((acc, g) => acc + Number(g.totalPesos || 0), 0);
-  const neto = totalVentas - totalGastos;
+
+  const cats = getCategoriasResumen(gastos);
+
+  tbodyCategorias.innerHTML = "";
+
+  if (!cats.length) {
+    tbodyCategorias.innerHTML = `<tr><td colspan="4" style="padding:12px;color:#555;font-weight:800;">Sin gastos</td></tr>`;
+    return;
+  }
+
+  cats.forEach((c) => {
+    const pctVentas = totalVentas > 0 ? (c.total / totalVentas) * 100 : 0;
+    const pctGastos = totalGastos > 0 ? (c.total / totalGastos) * 100 : 0;
+
+    tbodyCategorias.innerHTML += `
+      <tr>
+        <td>${escapeHtml(c.categoria)}</td>
+        <td><strong>${formatMoney(c.total)}</strong></td>
+        <td>${formatPercent(pctVentas)}</td>
+        <td>${formatPercent(pctGastos)}</td>
+      </tr>
+    `;
+  });
+}
+
+function renderResumen(ventas, gastos, nomina) {
+  const totalVentas = ventas.reduce((acc, v) => acc + Number(v.totalPesos || 0), 0);
+  const totalGastos = gastos.reduce((acc, g) => acc + Number(g.totalPesos || 0), 0);
+  const totalNomina = nomina.reduce((acc, n) => acc + Number(n.totalPesos || 0), 0);
+  const neto = totalVentas - totalGastos - totalNomina;
 
   resVentas.textContent = formatMoney(totalVentas);
   resGastos.textContent = formatMoney(totalGastos);
+  if (resNomina) resNomina.textContent = formatMoney(totalNomina);
   resNeto.textContent = formatMoney(neto);
+
+  const margen = totalVentas > 0 ? (neto / totalVentas) * 100 : 0;
+  if (resMargen) resMargen.textContent = formatPercent(margen);
+
   resNeto.style.color = neto >= 0 ? "#1f8a4c" : "#b00020";
 }
 
-function renderTablasPorFecha(ventas, gastos) {
+function renderTablasPorFecha(ventas, gastos, nomina) {
   contenedorFechas.innerHTML = "";
 
   const ventasPorFecha = agruparPorFecha(ventas);
   const gastosPorFecha = agruparPorFecha(gastos);
+  const nominaPorFecha = agruparPorFecha(nomina);
 
-  const keys = new Set([...Object.keys(ventasPorFecha), ...Object.keys(gastosPorFecha)]);
+  const keys = new Set([
+    ...Object.keys(ventasPorFecha),
+    ...Object.keys(gastosPorFecha),
+    ...Object.keys(nominaPorFecha)
+  ]);
+
   const fechasOrdenadas = ordenarFechasAsc([...keys]);
 
   if (fechasOrdenadas.length === 0) {
@@ -297,11 +322,13 @@ function renderTablasPorFecha(ventas, gastos) {
   fechasOrdenadas.forEach((fechaKey) => {
     const vList = ventasPorFecha[fechaKey] || [];
     const gList = gastosPorFecha[fechaKey] || [];
+    const nList = nominaPorFecha[fechaKey] || [];
 
     const totalKilos = vList.reduce((acc, x) => acc + Number(x.kilos || 0), 0);
     const totalV = vList.reduce((acc, x) => acc + Number(x.totalPesos || 0), 0);
     const totalG = gList.reduce((acc, x) => acc + Number(x.totalPesos || 0), 0);
-    const neto = totalV - totalG;
+    const totalN = nList.reduce((acc, x) => acc + Number(x.totalPesos || 0), 0);
+    const neto = totalV - totalG - totalN;
 
     const ventasRows = vList.map((v) => {
       const tipo = escapeHtml(v.tipoVenta || "-");
@@ -343,6 +370,22 @@ function renderTablasPorFecha(ventas, gastos) {
       `;
     }).join("");
 
+    const nominaRows = nList.map((n) => {
+      const sucNombre = n.sucursalNombre || getSucursalNombreById(n.sucursalId);
+      const suc = escapeHtml(sucNombre || "-");
+
+      const desc = escapeHtml(n.descripcion || "-");
+      const total = formatNumber(n.totalPesos || 0, 2);
+
+      return `
+        <tr>
+          <td>${suc}</td>
+          <td>${desc}</td>
+          <td>$${total}</td>
+        </tr>
+      `;
+    }).join("");
+
     contenedorFechas.innerHTML += `
       <div class="fecha-card">
         <div class="fecha-title">
@@ -351,6 +394,7 @@ function renderTablasPorFecha(ventas, gastos) {
             <div class="badge">Kilos: ${formatNumber(totalKilos, 1)}</div>
             <div class="badge">Ventas: ${formatMoney(totalV)}</div>
             <div class="badge">Gastos: ${formatMoney(totalG)}</div>
+            <div class="badge">Nómina: ${formatMoney(totalN)}</div>
             <div class="badge">Neto: ${formatMoney(neto)}</div>
           </div>
         </div>
@@ -380,7 +424,7 @@ function renderTablasPorFecha(ventas, gastos) {
           <table>
             <thead>
               <tr>
-                <th colspan="4">Gastos (incluye egresos + pagos)</th>
+                <th colspan="4">Gastos (operativos + egresos)</th>
               </tr>
               <tr>
                 <th>Sucursal</th>
@@ -394,96 +438,133 @@ function renderTablasPorFecha(ventas, gastos) {
             </tbody>
           </table>
         </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th colspan="3">Gastos de Personal (nómina)</th>
+              </tr>
+              <tr>
+                <th>Sucursal</th>
+                <th>Descripción</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${nominaRows || `<tr><td colspan="3">Sin nómina</td></tr>`}
+            </tbody>
+          </table>
+        </div>
       </div>
     `;
   });
 }
 
 function renderTodo() {
-  const { ventas, gastos } = getFiltrados();
-  renderResumen(ventas, gastos);
-  renderTablasPorFecha(ventas, gastos);
+  const { ventas, gastos, nomina } = getFiltrados();
+  renderResumen(ventas, gastos, nomina);
+  renderCategorias(ventas, gastos);
+  renderTablasPorFecha(ventas, gastos, nomina);
 }
 
-// ============================
-// EXCEL PRO
-// ============================
-
 function autoFitColumns(ws, rows) {
-  // calcula ancho por contenido
   const colWidths = [];
   rows.forEach((r) => {
     r.forEach((cell, i) => {
       const val = cell == null ? "" : String(cell);
       const len = val.length;
-      colWidths[i] = Math.max(colWidths[i] || 10, Math.min(40, len + 2));
+      colWidths[i] = Math.max(colWidths[i] || 10, Math.min(45, len + 2));
     });
   });
   ws["!cols"] = colWidths.map(w => ({ wch: w }));
 }
 
-function descargarExcelXLSX(ventas, gastos) {
+function descargarExcelXLSX(ventas, gastos, nomina) {
   const map = {};
 
   ventas.forEach((v) => {
     const key = v.fechaKey || "Sin fecha";
-    if (!map[key]) map[key] = { ventas: [], gastos: [] };
+    if (!map[key]) map[key] = { ventas: [], gastos: [], nomina: [] };
     map[key].ventas.push(v);
   });
 
   gastos.forEach((g) => {
     const key = g.fechaKey || "Sin fecha";
-    if (!map[key]) map[key] = { ventas: [], gastos: [] };
+    if (!map[key]) map[key] = { ventas: [], gastos: [], nomina: [] };
     map[key].gastos.push(g);
+  });
+
+  nomina.forEach((n) => {
+    const key = n.fechaKey || "Sin fecha";
+    if (!map[key]) map[key] = { ventas: [], gastos: [], nomina: [] };
+    map[key].nomina.push(n);
   });
 
   const fechas = ordenarFechasAsc(Object.keys(map));
   const wb = XLSX.utils.book_new();
 
-  // Hoja RESUMEN general
   const resumenRows = [];
   resumenRows.push(["REPORTE EL MAIZAL"]);
   resumenRows.push(["Generado", new Date().toLocaleString("es-MX")]);
   resumenRows.push([]);
-  resumenRows.push(["Fecha", "Kilos", "Ventas", "Gastos", "Neto"]);
+  resumenRows.push(["Fecha", "Kilos", "Ventas", "Gastos", "Nómina", "Neto"]);
 
   fechas.forEach((fechaKey) => {
     const vList = map[fechaKey].ventas || [];
     const gList = map[fechaKey].gastos || [];
+    const nList = map[fechaKey].nomina || [];
 
     const totalKilos = vList.reduce((acc, x) => acc + Number(x.kilos || 0), 0);
     const totalV = vList.reduce((acc, x) => acc + Number(x.totalPesos || 0), 0);
     const totalG = gList.reduce((acc, x) => acc + Number(x.totalPesos || 0), 0);
-    const neto = totalV - totalG;
+    const totalN = nList.reduce((acc, x) => acc + Number(x.totalPesos || 0), 0);
+    const neto = totalV - totalG - totalN;
 
-    resumenRows.push([
-      fechaKey,
-      totalKilos,
-      totalV,
-      totalG,
-      neto
-    ]);
+    resumenRows.push([fechaKey, totalKilos, totalV, totalG, totalN, neto]);
   });
 
   resumenRows.push([]);
   const totalVentasAll = ventas.reduce((acc, x) => acc + Number(x.totalPesos || 0), 0);
   const totalGastosAll = gastos.reduce((acc, x) => acc + Number(x.totalPesos || 0), 0);
+  const totalNominaAll = nomina.reduce((acc, x) => acc + Number(x.totalPesos || 0), 0);
   const totalKilosAll = ventas.reduce((acc, x) => acc + Number(x.kilos || 0), 0);
-  resumenRows.push(["TOTALES", totalKilosAll, totalVentasAll, totalGastosAll, totalVentasAll - totalGastosAll]);
+  resumenRows.push(["TOTALES", totalKilosAll, totalVentasAll, totalGastosAll, totalNominaAll, totalVentasAll - totalGastosAll - totalNominaAll]);
 
   const wsResumen = XLSX.utils.aoa_to_sheet(resumenRows);
   autoFitColumns(wsResumen, resumenRows);
   XLSX.utils.book_append_sheet(wb, wsResumen, "RESUMEN");
 
-  // Hojas por fecha
+  const catRows = [];
+  catRows.push(["ANÁLISIS POR CATEGORÍAS"]);
+  catRows.push(["Generado", new Date().toLocaleString("es-MX")]);
+  catRows.push([]);
+  catRows.push(["Categoría", "Total", "% de ventas", "% de gastos"]);
+
+  const cats = getCategoriasResumen(gastos);
+  const totalVentas = totalVentasAll;
+  const totalGastos = totalGastosAll;
+
+  cats.forEach((c) => {
+    const pctVentas = totalVentas > 0 ? (c.total / totalVentas) * 100 : 0;
+    const pctGastos = totalGastos > 0 ? (c.total / totalGastos) * 100 : 0;
+    catRows.push([c.categoria, c.total, pctVentas, pctGastos]);
+  });
+
+  const wsCats = XLSX.utils.aoa_to_sheet(catRows);
+  autoFitColumns(wsCats, catRows);
+  XLSX.utils.book_append_sheet(wb, wsCats, "CATEGORIAS");
+
   fechas.forEach((fechaKey) => {
     const vList = map[fechaKey].ventas || [];
     const gList = map[fechaKey].gastos || [];
+    const nList = map[fechaKey].nomina || [];
 
     const totalKilos = vList.reduce((acc, x) => acc + Number(x.kilos || 0), 0);
     const totalV = vList.reduce((acc, x) => acc + Number(x.totalPesos || 0), 0);
     const totalG = gList.reduce((acc, x) => acc + Number(x.totalPesos || 0), 0);
-    const neto = totalV - totalG;
+    const totalN = nList.reduce((acc, x) => acc + Number(x.totalPesos || 0), 0);
+    const neto = totalV - totalG - totalN;
 
     const rows = [];
 
@@ -508,7 +589,7 @@ function descargarExcelXLSX(ventas, gastos) {
     });
 
     rows.push([]);
-    rows.push(["GASTOS (incluye egresos + pagos)"]);
+    rows.push(["GASTOS (operativos + egresos)"]);
     rows.push(["Sucursal", "Categoria", "Descripcion", "Total"]);
 
     gList.forEach((g) => {
@@ -523,10 +604,25 @@ function descargarExcelXLSX(ventas, gastos) {
     });
 
     rows.push([]);
+    rows.push(["GASTOS DE PERSONAL (NÓMINA)"]);
+    rows.push(["Sucursal", "Descripcion", "Total"]);
+
+    nList.forEach((n) => {
+      const sucNombre = n.sucursalNombre || getSucursalNombreById(n.sucursalId);
+
+      rows.push([
+        sucNombre || "",
+        n.descripcion || "",
+        Number(n.totalPesos || 0)
+      ]);
+    });
+
+    rows.push([]);
     rows.push(["RESUMEN"]);
     rows.push(["Total Kilos", totalKilos]);
     rows.push(["Total Ventas", totalV]);
     rows.push(["Total Gastos", totalG]);
+    rows.push(["Total Nómina", totalN]);
     rows.push(["Neto", neto]);
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -541,10 +637,6 @@ function descargarExcelXLSX(ventas, gastos) {
   const fileName = `reporte_maizal_${new Date().toLocaleDateString("sv-SE")}.xlsx`;
   XLSX.writeFile(wb, fileName);
 }
-
-// ============================
-// AUTH + LISTENERS
-// ============================
 
 auth.onAuthStateChanged((user) => {
   if (!user) {
@@ -574,7 +666,6 @@ auth.onAuthStateChanged((user) => {
       renderTodo();
     });
 
-  // NUEVO: egresos globales
   db.collection("egresos")
     .orderBy("createdAt", "desc")
     .limit(1500)
@@ -583,7 +674,6 @@ auth.onAuthStateChanged((user) => {
       renderTodo();
     });
 
-  // NUEVO: pagos colaboradores
   db.collection("pagos")
     .orderBy("createdAt", "desc")
     .limit(1500)
@@ -611,7 +701,7 @@ btnClearFecha.addEventListener("click", () => {
 });
 
 btnExcel.addEventListener("click", () => {
-  const { ventas, gastos } = getFiltrados();
-  descargarExcelXLSX(ventas, gastos);
+  const { ventas, gastos, nomina } = getFiltrados();
+  descargarExcelXLSX(ventas, gastos, nomina);
   setMsg("Reporte exportado.", false);
 });
