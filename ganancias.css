@@ -279,9 +279,15 @@ body{
   border: 2px solid rgba(31,138,76,.35);
 }
 
-/* Cuando neto sea negativo, tu JS ya cambia color,
-   pero aquí dejamos que se vea más elegante */
 .res-card.neto strong{
+  font-size: 1.35rem;
+}
+
+.res-card.margen{
+  border: 2px solid rgba(242,201,76,.35);
+}
+
+.res-card.margen strong{
   font-size: 1.35rem;
 }
 
@@ -335,10 +341,6 @@ body{
   font-size:.85rem;
   border: 1px solid var(--gray-2);
   background:#fafafa;
-}
-
-/* Hace que los badges se vean más “pro” */
-.badge{
   box-shadow: 0 8px 18px rgba(0,0,0,.06);
 }
 
@@ -376,10 +378,6 @@ tbody tr:hover{
   background: rgba(242,201,76,.08);
 }
 
-/* =========================
-   MEJORAS EXTRA (PRO)
-   ========================= */
-
 .btn-back:hover,
 .btn-go:hover,
 .btn-go2:hover,
@@ -408,7 +406,7 @@ button:disabled{
 
 @media (min-width: 900px){
   .resumen{
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(5, 1fr);
   }
 }
 
