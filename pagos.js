@@ -184,7 +184,7 @@ function buildDefaultEmpleadoSemana(emp) {
     sueldoSemanal,
     bonos: 0,
     dias,
-    pagarDomingo: false
+    semanaPagada: false
   };
 }
 
@@ -214,7 +214,6 @@ function getEmpleadosFiltradosParaVista(empleadosSemana) {
 function getDiasTrabajados(empSemana) {
   let count = 0;
   DIAS.forEach((k) => {
-    if (k === "dom") return;
     if (empSemana.dias?.[k]?.trabajó === true) count++;
   });
   return count;
@@ -285,7 +284,8 @@ async function crearOAbrirSemana(lunesKey) {
     semanaActiva = { id: snap.id, ...(snap.data() || {}) };
 
     (semanaActiva.empleados || []).forEach((e) => {
-      if (typeof e.pagarDomingo !== "boolean") e.pagarDomingo = false;
+      if (typeof e.semanaPagada !== "boolean") e.semanaPagada = false;
+
       if (!e.dias) e.dias = {};
       if (!e.dias.dom) e.dias.dom = { trabajó: false, pago: 0 };
       if (typeof e.dias.dom.trabajó !== "boolean") e.dias.dom.trabajó = false;
@@ -436,8 +436,8 @@ function renderNomina() {
       const checked = d.trabajó === true ? "checked" : "";
       const val = Number(d.pago || 0);
 
-      const disableWork = isDom ? "disabled" : "";
-      const disablePay = isDom ? "disabled" : "";
+      const disableWork = "";
+      const disablePay = (isDom && e.semanaPagada !== true) ? "disabled" : "";
 
       diasHtml += `
         <td>
@@ -448,9 +448,9 @@ function renderNomina() {
             </label>
             <input type="number" min="0" step="0.01" data-pay="${realIdx}|${k}" value="${val ? String(val) : ""}" placeholder="$0" ${disablePay} style="padding:8px;border-radius:10px;border:1px solid #ddd;font-weight:800;" />
             ${isDom ? `
-              <label style="display:flex;align-items:center;gap:6px;font-weight:900;font-size:.78rem;color:#b00020;">
-                <input type="checkbox" data-dom="${realIdx}" ${e.pagarDomingo === true ? "checked" : ""} />
-                Pagar domingo
+              <label style="display:flex;align-items:center;gap:6px;font-weight:1000;font-size:.78rem;color:${e.semanaPagada === true ? "#1f8a4c" : "#b00020"};">
+                <input type="checkbox" data-semana="${realIdx}" ${e.semanaPagada === true ? "checked" : ""} />
+                ${e.semanaPagada === true ? "Semana pagada" : "Pagar semana"}
               </label>
             ` : ""}
           </div>
@@ -474,16 +474,16 @@ function renderNomina() {
     `;
   });
 
-  document.querySelectorAll("[data-dom]").forEach((el) => {
+  document.querySelectorAll("[data-semana]").forEach((el) => {
     el.addEventListener("change", async () => {
-      const idx = Number(el.getAttribute("data-dom") || "0");
+      const idx = Number(el.getAttribute("data-semana") || "0");
       const emp = semanaActiva.empleados?.[idx];
       if (!emp) return;
 
       const activar = el.checked === true;
 
-      if (typeof emp.pagarDomingo !== "boolean") emp.pagarDomingo = false;
-      emp.pagarDomingo = activar;
+      if (typeof emp.semanaPagada !== "boolean") emp.semanaPagada = false;
+      emp.semanaPagada = activar;
 
       if (!emp.dias) emp.dias = {};
       if (!emp.dias.dom) emp.dias.dom = { trabajó: false, pago: 0 };
@@ -512,8 +512,6 @@ function renderNomina() {
       const raw = el.getAttribute("data-work") || "";
       const [idxStr, dia] = raw.split("|");
       const idx = Number(idxStr);
-
-      if (dia === "dom") return;
 
       const emp = semanaActiva.empleados?.[idx];
       if (!emp) return;
@@ -546,7 +544,7 @@ function renderNomina() {
       if (!emp) return;
 
       if (dia === "dom") {
-        if (emp.pagarDomingo !== true) return;
+        if (emp.semanaPagada !== true) return;
       }
 
       const val = Number(el.value || 0);
@@ -569,7 +567,7 @@ function renderNomina() {
 
       emp.bonos = Number(el.value || 0);
 
-      if (emp.pagarDomingo === true) {
+      if (emp.semanaPagada === true) {
         const anticipos = getTotalAnticiposLunSab(emp);
         const sueldoSemanal = Number(emp.sueldoSemanal || 0);
         const bonos = Number(emp.bonos || 0);
