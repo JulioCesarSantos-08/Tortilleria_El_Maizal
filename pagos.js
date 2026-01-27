@@ -23,15 +23,12 @@ const btnGoGastos = document.getElementById("btnGoGastos");
 const btnGoEgresos = document.getElementById("btnGoEgresos");
 const btnLogout = document.getElementById("btnLogout");
 
-const msg = document.getElementById("msg");
-
 const filtroSucursalNomina = document.getElementById("filtroSucursalNomina");
 const filtroRolNomina = document.getElementById("filtroRolNomina");
 
 const semanaLunesInput = document.getElementById("semanaLunes");
 const btnCrearSemana = document.getElementById("btnCrearSemana");
 const btnSemanaActual = document.getElementById("btnSemanaActual");
-const btnSyncSueldos = document.getElementById("btnSyncSueldos");
 const btnEliminarSemana = document.getElementById("btnEliminarSemana");
 
 const resNominaTotal = document.getElementById("resNominaTotal");
@@ -41,16 +38,14 @@ const resTotalPagado = document.getElementById("resTotalPagado");
 const resPagadoEntre7 = document.getElementById("resPagadoEntre7");
 
 const tbodyNomina = document.getElementById("tbodyNomina");
-
-const histDesde = document.getElementById("histDesde");
-const histHasta = document.getElementById("histHasta");
-const btnClearHist = document.getElementById("btnClearHist");
 const wrapSemanas = document.getElementById("wrapSemanas");
 
 let empleadosCache = [];
 let semanasCache = [];
-let semanaActivaKey = null;
+let anticiposCache = [];
+
 let semanaActiva = null;
+let semanaActivaKey = null;
 
 function formatMoney(n) {
   return "$" + Number(n || 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -84,6 +79,16 @@ function getSemanaLabel(lunesKey) {
   return l.toLocaleDateString("es-MX") + " - " + d.toLocaleDateString("es-MX");
 }
 
+function getSemanaRango(lunesKey) {
+  const lunes = new Date(lunesKey + "T00:00:00");
+  const domingo = new Date(lunes);
+  domingo.setDate(domingo.getDate() + 6);
+  return {
+    desde: lunes.toLocaleDateString("sv-SE"),
+    hasta: domingo.toLocaleDateString("sv-SE")
+  };
+}
+
 function buildEmpleadoSemana(emp) {
   return {
     empleadoId: emp.id,
@@ -97,13 +102,30 @@ function buildEmpleadoSemana(emp) {
   };
 }
 
+function getAnticipoEmpleadoSemana(empleadoId, lunesKey) {
+  if (!lunesKey) return 0;
+  const { desde, hasta } = getSemanaRango(lunesKey);
+
+  return anticiposCache
+    .filter(a =>
+      String(a.colaboradorId) === String(empleadoId) &&
+      a.fechaKey >= desde &&
+      a.fechaKey <= hasta
+    )
+    .reduce((acc, a) => acc + Number(a.totalPesos || 0), 0);
+}
+
 function calcEmpleado(emp) {
   const base = (emp.sueldoSemanal / 7) * emp.diasTrabajados;
-  const total = round2(base + emp.bonos);
+  const bruto = round2(base + emp.bonos);
+  const anticipo = getAnticipoEmpleadoSemana(emp.empleadoId, semanaActiva.lunesKey);
+  const neto = Math.max(bruto - anticipo, 0);
+
   return {
-    totalPagado: emp.semanaPagada ? total : 0,
-    pendiente: emp.semanaPagada ? 0 : total,
-    total
+    bruto,
+    anticipo,
+    totalPagado: emp.semanaPagada ? neto : 0,
+    pendiente: emp.semanaPagada ? 0 : neto
   };
 }
 
@@ -114,7 +136,7 @@ function calcTotales() {
 
   semanaActiva.empleados.forEach(e => {
     const c = calcEmpleado(e);
-    totalNomina += c.total;
+    totalNomina += c.bruto;
     totalPendiente += c.pendiente;
     totalPagado += c.totalPagado;
   });
@@ -129,9 +151,6 @@ function calcTotales() {
 
 async function guardarSemana() {
   const t = calcTotales();
-  semanaActiva.totalNomina = t.totalNomina;
-  semanaActiva.totalPendiente = t.totalPendiente;
-
   await db.collection("pagosSemanas").doc(semanaActivaKey).update({
     empleados: semanaActiva.empleados,
     totalNomina: t.totalNomina,
@@ -179,12 +198,13 @@ function renderNomina() {
   });
 
   if (!empleadosVista.length) {
-    tbodyNomina.innerHTML = `<tr><td colspan="9">Sin colaboradores para estos filtros.</td></tr>`;
+    tbodyNomina.innerHTML = `<tr><td colspan="8">Sin colaboradores para estos filtros.</td></tr>`;
     return;
   }
 
   empleadosVista.forEach((e, idx) => {
     const c = calcEmpleado(e);
+    const anticipoTxt = c.anticipo > 0 ? ` (-${formatMoney(c.anticipo)})` : "";
 
     tbodyNomina.innerHTML += `
       <tr>
@@ -194,7 +214,7 @@ function renderNomina() {
         <td><input type="number" step="0.1" min="0" max="7" value="${e.diasTrabajados}" data-dias="${idx}"></td>
         <td><input type="number" step="0.01" value="${e.bonos}" data-bono="${idx}"></td>
         <td>${formatMoney(c.totalPagado)}</td>
-        <td style="color:${c.pendiente > 0 ? "#b00020" : "#1f8a4c"}">${formatMoney(c.pendiente)}</td>
+        <td style="color:${c.pendiente > 0 ? "#b00020" : "#1f8a4c"}">${formatMoney(c.pendiente)}${anticipoTxt}</td>
         <td>
           <button data-pagada="${idx}" style="background:${e.semanaPagada ? "#1f8a4c" : "#b00020"};color:#fff;border:none;padding:6px 10px;border-radius:10px;">
             ${e.semanaPagada ? "Semana pagada" : "Semana no pagada"}
@@ -239,12 +259,11 @@ function renderNomina() {
 
 function renderHistorial() {
   wrapSemanas.innerHTML = "";
-
   semanasCache.forEach(s => {
     wrapSemanas.innerHTML += `
       <section class="card">
         <h3>Semana: ${s.label}</h3>
-        <button data-open="${s.lunesKey}">Abrir semana</button>
+        <button class="btn-secondary" data-open="${s.lunesKey}">Abrir semana</button>
       </section>
     `;
   });
@@ -277,6 +296,14 @@ auth.onAuthStateChanged(async user => {
     semanasCache = s.docs.map(d => d.data());
     renderHistorial();
   });
+
+  db.collection("gastos")
+    .where("categoria", "==", "Trabajadores")
+    .where("esAnticipo", "==", true)
+    .onSnapshot(s => {
+      anticiposCache = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderNomina();
+    });
 });
 
 btnBack.onclick = () => location.href = "panel.html";
