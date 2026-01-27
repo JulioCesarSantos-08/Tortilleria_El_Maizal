@@ -128,7 +128,6 @@ function renderRow(doc) {
 
 function renderTablas() {
   tablasWrap.innerHTML = "";
-
   const grupos = new Map();
 
   empleadosDocs.forEach(doc => {
@@ -157,9 +156,7 @@ function renderTablas() {
                 <th>Acción</th>
               </tr>
             </thead>
-            <tbody>
-              ${rows}
-            </tbody>
+            <tbody>${rows}</tbody>
           </table>
         </div>
       </section>
@@ -199,7 +196,8 @@ auth.onAuthStateChanged(user => {
 
   escucharSucursales();
 
-  db.collection("empleados").orderBy("createdAt", "desc")
+  db.collection("empleados")
+    .orderBy("createdAt", "desc")
     .onSnapshot(s => {
       empleadosDocs = s.docs;
       renderTablas();
@@ -224,13 +222,7 @@ formEmpleado.addEventListener("submit", async e => {
   btnGuardar.disabled = true;
 
   try {
-    const data = {
-      nombre,
-      rol,
-      sueldoSemanal: sueldo,
-      sucursalId,
-      sucursalNombre
-    };
+    const data = { nombre, rol, sueldoSemanal: sueldo, sucursalId, sucursalNombre };
 
     if (editId) {
       await db.collection("empleados").doc(editId).update(data);
@@ -251,8 +243,34 @@ formEmpleado.addEventListener("submit", async e => {
   }
 });
 
-btnCancelar.onclick = () => limpiarForm();
+btnBorrarTodos.addEventListener("click", async () => {
+  const ok = confirm("¿Seguro que deseas eliminar TODOS los empleados?");
+  if (!ok) return;
 
+  btnBorrarTodos.disabled = true;
+
+  try {
+    const snap = await db.collection("empleados").get();
+    if (snap.empty) {
+      setMsg("No hay empleados para eliminar.");
+      btnBorrarTodos.disabled = false;
+      return;
+    }
+
+    const batch = db.batch();
+    snap.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+
+    setMsg("Todos los empleados fueron eliminados.", false);
+    limpiarForm();
+  } catch {
+    setMsg("Error al eliminar empleados.");
+  } finally {
+    btnBorrarTodos.disabled = false;
+  }
+});
+
+btnCancelar.onclick = limpiarForm;
 btnModalCancelar.onclick = cerrarModalEliminar;
 
 btnModalEliminar.onclick = async () => {
