@@ -42,20 +42,14 @@ let deleteId = null;
 
 let empleadosDocs = [];
 let sucursalesMap = new Map();
-
 let msgTimer = null;
 
 function setMsg(text = "", isError = true, autoClearMs = 2500) {
   msg.style.color = isError ? "#b00020" : "#1f8a4c";
   msg.textContent = text;
-
   if (msgTimer) clearTimeout(msgTimer);
-
   if (!text) return;
-
-  msgTimer = setTimeout(() => {
-    msg.textContent = "";
-  }, autoClearMs);
+  msgTimer = setTimeout(() => msg.textContent = "", autoClearMs);
 }
 
 function escapeHtml(text) {
@@ -67,29 +61,11 @@ function escapeHtml(text) {
     .replaceAll("'", "&#039;");
 }
 
-function getFechaKeyHoy() {
-  return new Date().toLocaleDateString("sv-SE");
-}
-
-async function addLog({ accion, detalle }) {
-  try {
-    const user = auth.currentUser;
-    await db.collection("logs").add({
-      modulo: "empleados",
-      accion: String(accion || ""),
-      detalle: String(detalle || ""),
-      userEmail: String(user?.email || ""),
-      fechaKey: getFechaKeyHoy(),
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  } catch (e) {}
-}
-
 function limpiarForm() {
   editId = null;
   nombreInput.value = "";
-  sucursalSelect.value = "";
   rolSelect.value = "";
+  sucursalSelect.value = "";
   sueldoSemanalInput.value = "";
   btnCancelar.style.display = "none";
   btnGuardar.textContent = "Guardar";
@@ -105,114 +81,72 @@ function cerrarModalEliminar() {
   modalBackdrop.style.display = "none";
 }
 
-function getSucursalNombreById(id) {
-  if (!id) return "Sin sucursal";
-  const s = sucursalesMap.get(String(id));
-  return s?.nombre || "Sucursal eliminada";
-}
-
 function fillSucursalSelect() {
   sucursalSelect.innerHTML = `<option value="">Selecciona sucursal</option>`;
-
-  const sucursalesActivas = Array.from(sucursalesMap.entries())
-    .map(([id, data]) => ({ id, ...data }))
-    .filter(s => s.activa === true)
-    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
-
-  sucursalesActivas.forEach((s) => {
-    const opt = document.createElement("option");
-    opt.value = s.id;
-    opt.textContent = s.nombre || "Sin nombre";
-    sucursalSelect.appendChild(opt);
-  });
+  Array.from(sucursalesMap.entries())
+    .filter(([, d]) => d.activa === true)
+    .sort((a, b) => (a[1].nombre || "").localeCompare(b[1].nombre || ""))
+    .forEach(([id, data]) => {
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = data.nombre;
+      sucursalSelect.appendChild(opt);
+    });
 }
 
 function escucharSucursales() {
   db.collection("sucursales")
     .orderBy("nombre", "asc")
-    .onSnapshot((snapshot) => {
-      sucursalesMap = new Map();
-
-      snapshot.forEach((doc) => {
-        const data = doc.data() || {};
+    .onSnapshot(snap => {
+      sucursalesMap.clear();
+      snap.forEach(doc => {
+        const d = doc.data() || {};
         sucursalesMap.set(doc.id, {
-          nombre: data.nombre || "Sin nombre",
-          activa: data.activa === true
+          nombre: d.nombre || "",
+          activa: d.activa === true
         });
       });
-
       fillSucursalSelect();
-      renderTablasDinamicas();
+      renderTablas();
     });
 }
 
 function renderRow(doc) {
-  const data = doc.data() || {};
-  const nombre = escapeHtml(data.nombre || "");
-  const rol = escapeHtml(data.rol || "");
-  const sueldo = Number(data.sueldoSemanal || 0);
-  const id = doc.id;
-
+  const d = doc.data();
   return `
     <tr>
-      <td>${nombre}</td>
-      <td>${rol}</td>
-      <td>$${sueldo.toLocaleString("es-MX")}</td>
+      <td>${escapeHtml(d.nombre)}</td>
+      <td>${escapeHtml(d.rol)}</td>
+      <td>$${Number(d.sueldoSemanal).toLocaleString("es-MX")}</td>
       <td>
-        <div class="row-actions">
-          <button class="btn-mini btn-edit" data-edit="${id}">Editar</button>
-          <button class="btn-mini btn-del" data-del="${id}">Eliminar</button>
-        </div>
+        <button class="btn-mini btn-edit" data-edit="${doc.id}">Editar</button>
+        <button class="btn-mini btn-del" data-del="${doc.id}">Eliminar</button>
       </td>
     </tr>
   `;
 }
 
-function renderTablasDinamicas() {
-  if (!tablasWrap) return;
-
-  const grupos = new Map();
-  const sinSucursal = [];
-
-  empleadosDocs.forEach((doc) => {
-    const data = doc.data() || {};
-    const rol = String(data.rol || "");
-    const sucId = String(data.sucursalId || "");
-
-    if (rol === "Empleado") {
-      sinSucursal.push(doc);
-      return;
-    }
-
-    if (!grupos.has(sucId)) grupos.set(sucId, []);
-    grupos.get(sucId).push(doc);
-  });
-
-  const sucursalesOrdenadas = Array.from(sucursalesMap.entries())
-    .map(([id, data]) => ({ id, ...data }))
-    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
-
-  const idsEnEmpleados = Array.from(grupos.keys()).filter(id => id && !sucursalesMap.has(id));
-  const sucursalesEliminadas = idsEnEmpleados.map(id => ({
-    id,
-    nombre: "Sucursal eliminada",
-    activa: false
-  }));
-
-  const todas = [...sucursalesOrdenadas, ...sucursalesEliminadas];
-
+function renderTablas() {
   tablasWrap.innerHTML = "";
 
-  if (sinSucursal.length) {
+  const grupos = new Map();
+
+  empleadosDocs.forEach(doc => {
+    const d = doc.data();
+    const sid = d.sucursalId;
+    if (!grupos.has(sid)) grupos.set(sid, []);
+    grupos.get(sid).push(doc);
+  });
+
+  Array.from(grupos.entries()).forEach(([sid, lista]) => {
+    const suc = sucursalesMap.get(sid);
+    const nombre = escapeHtml(suc?.nombre || "Sucursal eliminada");
     let rows = "";
-    sinSucursal.forEach((doc) => {
-      rows += renderRow(doc);
-    });
+    lista.forEach(d => rows += renderRow(d));
 
-    const tablaHtml = `
+    tablasWrap.innerHTML += `
       <section class="card">
-        <h2>Empleados (Sin sucursal)</h2>
-
+        <h2>${nombre}</h2>
         <div class="table-wrap">
           <table>
             <thead>
@@ -224,325 +158,112 @@ function renderTablasDinamicas() {
               </tr>
             </thead>
             <tbody>
-              ${rows || `<tr><td colspan="4" style="padding:12px;color:#555;font-weight:800;">Sin empleados</td></tr>`}
+              ${rows}
             </tbody>
           </table>
         </div>
       </section>
     `;
-
-    tablasWrap.innerHTML += tablaHtml;
-  }
-
-  if (todas.length === 0) {
-    tablasWrap.innerHTML += `<p style="margin-top:10px;font-weight:800;color:#555;">No hay sucursales registradas.</p>`;
-    attachActions();
-    return;
-  }
-
-  todas.forEach((suc) => {
-    const lista = grupos.get(String(suc.id)) || [];
-    const titulo = escapeHtml(suc.nombre || "Sin nombre");
-    const badge = suc.activa ? "" : ` <span style="font-size:.85rem;color:#b00020;font-weight:900;">(Inactiva)</span>`;
-
-    let rows = "";
-    lista.forEach((doc) => {
-      rows += renderRow(doc);
-    });
-
-    const tablaHtml = `
-      <section class="card">
-        <h2>Empleados - ${titulo}${badge}</h2>
-
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Nombre</th>
-                <th>Rol</th>
-                <th>Sueldo semanal</th>
-                <th>Acción</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows || `<tr><td colspan="4" style="padding:12px;color:#555;font-weight:800;">Sin empleados</td></tr>`}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    `;
-
-    tablasWrap.innerHTML += tablaHtml;
   });
 
   attachActions();
 }
 
 function attachActions() {
-  document.querySelectorAll("[data-edit]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const id = btn.getAttribute("data-edit");
-      const snap = await db.collection("empleados").doc(id).get();
+  document.querySelectorAll("[data-edit]").forEach(b => {
+    b.onclick = async () => {
+      const snap = await db.collection("empleados").doc(b.dataset.edit).get();
       if (!snap.exists) return;
-
-      const data = snap.data() || {};
-      editId = id;
-
-      nombreInput.value = data.nombre || "";
-      rolSelect.value = data.rol || "";
-      sueldoSemanalInput.value = String(data.sueldoSemanal ?? "");
-
-      const rol = String(data.rol || "");
-      const sucId = String(data.sucursalId || "");
-      const existsOption = Array.from(sucursalSelect.options).some(o => String(o.value) === sucId);
-
-      if (rol === "Empleado") {
-        sucursalSelect.value = "";
-      } else {
-        if (existsOption) {
-          sucursalSelect.value = sucId;
-        } else {
-          sucursalSelect.value = "";
-        }
-      }
-
+      const d = snap.data();
+      editId = snap.id;
+      nombreInput.value = d.nombre;
+      rolSelect.value = d.rol;
+      sueldoSemanalInput.value = d.sueldoSemanal;
+      sucursalSelect.value = d.sucursalId;
       btnCancelar.style.display = "inline-block";
       btnGuardar.textContent = "Guardar cambios";
-      setMsg("");
       window.scrollTo({ top: 0, behavior: "smooth" });
-    });
+    };
   });
 
-  document.querySelectorAll("[data-del]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const id = btn.getAttribute("data-del");
-      abrirModalEliminar(id);
-    });
+  document.querySelectorAll("[data-del]").forEach(b => {
+    b.onclick = () => abrirModalEliminar(b.dataset.del);
   });
 }
 
-auth.onAuthStateChanged((user) => {
-  if (!user) {
-    window.location.href = "index.html";
-    return;
-  }
-
-  userEmail.textContent = user.email || "Usuario";
+auth.onAuthStateChanged(user => {
+  if (!user) return location.href = "index.html";
+  userEmail.textContent = user.email;
   loading.style.display = "none";
   app.style.display = "block";
 
   escucharSucursales();
 
-  db.collection("empleados")
-    .orderBy("createdAt", "desc")
-    .onSnapshot((snapshot) => {
-      empleadosDocs = snapshot.docs;
-      renderTablasDinamicas();
+  db.collection("empleados").orderBy("createdAt", "desc")
+    .onSnapshot(s => {
+      empleadosDocs = s.docs;
+      renderTablas();
     });
 });
 
-document.getElementById("btnLogout").addEventListener("click", async () => {
-  await auth.signOut();
-  window.location.href = "index.html";
-});
-
-btnBack.addEventListener("click", () => {
-  window.location.href = "panel.html";
-});
-
-btnCancelar.addEventListener("click", () => {
-  limpiarForm();
-  setMsg("");
-});
-
-formEmpleado.addEventListener("submit", async (e) => {
+formEmpleado.addEventListener("submit", async e => {
   e.preventDefault();
-
-  setMsg("");
 
   const nombre = nombreInput.value.trim();
   const rol = rolSelect.value;
-  const sueldoSemanal = Number(sueldoSemanalInput.value);
+  const sueldo = Number(sueldoSemanalInput.value);
+  const sucursalId = sucursalSelect.value;
 
-  let sucursalId = sucursalSelect.value;
-
-  if (!nombre || !rol || !Number.isFinite(sueldoSemanal) || sueldoSemanal < 0) {
-    setMsg("Completa todos los campos correctamente.");
+  if (!nombre || !rol || !sucursalId || sueldo < 0) {
+    setMsg("Completa todos los campos.");
     return;
   }
 
-  if (rol === "Empleado") {
-    sucursalId = "";
-  }
-
-  let sucursalNombre = "";
-
-  if (rol !== "Empleado") {
-    if (!sucursalId) {
-      setMsg("Selecciona una sucursal.");
-      return;
-    }
-
-    const sucObj = sucursalesMap.get(String(sucursalId));
-    if (!sucObj || sucObj.activa !== true) {
-      setMsg("Esa sucursal está inactiva. Selecciona otra.");
-      return;
-    }
-
-    sucursalNombre = sucObj.nombre || "";
-  }
+  const sucursalNombre = sucursalesMap.get(sucursalId)?.nombre || "";
 
   btnGuardar.disabled = true;
 
   try {
+    const data = {
+      nombre,
+      rol,
+      sueldoSemanal: sueldo,
+      sucursalId,
+      sucursalNombre
+    };
+
     if (editId) {
-      const beforeSnap = await db.collection("empleados").doc(editId).get();
-      const before = beforeSnap.exists ? (beforeSnap.data() || {}) : null;
-
-      await db.collection("empleados").doc(editId).update({
-        nombre,
-        rol,
-        sueldoSemanal,
-        sucursalId: String(sucursalId || ""),
-        sucursalNombre: String(sucursalNombre || "")
-      });
-
-      let detalle = `Actualizó empleado: ${nombre} (${rol})`;
-
-      if (rol !== "Empleado") {
-        detalle += ` en ${sucursalNombre || "-"}`;
-      } else {
-        detalle += ` (Sin sucursal)`;
-      }
-
-      if (before) {
-        const cambios = [];
-        const bNombre = before.nombre || "";
-        const bRol = before.rol || "";
-        const bSueldo = Number(before.sueldoSemanal || 0);
-        const bSuc = before.sucursalNombre || getSucursalNombreById(before.sucursalId);
-
-        if (String(bNombre) !== String(nombre)) cambios.push(`Nombre: "${bNombre}" → "${nombre}"`);
-        if (String(bRol) !== String(rol)) cambios.push(`Rol: "${bRol}" → "${rol}"`);
-        if (Number(bSueldo) !== Number(sueldoSemanal)) cambios.push(`Sueldo semanal: $${bSueldo} → $${sueldoSemanal}`);
-
-        if (rol !== "Empleado") {
-          if (String(bSuc || "") !== String(sucursalNombre || "")) cambios.push(`Sucursal: "${bSuc || "-"}" → "${sucursalNombre}"`);
-        } else {
-          if (String(before.sucursalId || "") !== "") cambios.push(`Sucursal: "${bSuc || "-"}" → "Sin sucursal"`);
-        }
-
-        if (cambios.length) detalle += ` | Cambios: ${cambios.join(" | ")}`;
-      }
-
-      await addLog({ accion: "editar", detalle });
-
+      await db.collection("empleados").doc(editId).update(data);
       setMsg("Empleado actualizado.", false);
-      limpiarForm();
     } else {
       await db.collection("empleados").add({
-        nombre,
-        rol,
-        sueldoSemanal,
-        sucursalId: String(sucursalId || ""),
-        sucursalNombre: String(sucursalNombre || ""),
+        ...data,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
-
-      let detalle = `Registró empleado: ${nombre} (${rol})`;
-      if (rol !== "Empleado") detalle += ` en ${sucursalNombre || "-"}`;
-      else detalle += ` (Sin sucursal)`;
-
-      await addLog({
-        accion: "crear",
-        detalle
-      });
-
       setMsg("Empleado registrado.", false);
-      limpiarForm();
     }
-  } catch (error) {
-    setMsg("Ocurrió un error, intenta de nuevo.");
+
+    limpiarForm();
+  } catch {
+    setMsg("Error al guardar.");
   } finally {
     btnGuardar.disabled = false;
   }
 });
 
-btnBorrarTodos.addEventListener("click", async () => {
-  const ok = confirm("¿Seguro que deseas eliminar TODOS los empleados? Esta acción no se puede deshacer.");
-  if (!ok) return;
+btnCancelar.onclick = () => limpiarForm();
 
-  btnBorrarTodos.disabled = true;
+btnModalCancelar.onclick = cerrarModalEliminar;
 
-  try {
-    const snap = await db.collection("empleados").get();
-    if (snap.empty) {
-      setMsg("No hay empleados para eliminar.");
-      return;
-    }
-
-    const total = snap.size;
-
-    const batch = db.batch();
-    snap.docs.forEach((doc) => batch.delete(doc.ref));
-    await batch.commit();
-
-    await addLog({
-      accion: "eliminar",
-      detalle: `Eliminó TODOS los empleados. Total eliminados: ${total}.`
-    });
-
-    limpiarForm();
-    setMsg("Todos los empleados fueron eliminados.", false);
-  } catch (e) {
-    setMsg("No se pudieron eliminar todos los empleados.");
-  } finally {
-    btnBorrarTodos.disabled = false;
-  }
-});
-
-btnModalCancelar.addEventListener("click", () => {
-  cerrarModalEliminar();
-});
-
-modalBackdrop.addEventListener("click", (e) => {
-  if (e.target === modalBackdrop) cerrarModalEliminar();
-});
-
-btnModalEliminar.addEventListener("click", async () => {
+btnModalEliminar.onclick = async () => {
   if (!deleteId) return;
+  await db.collection("empleados").doc(deleteId).delete();
+  cerrarModalEliminar();
+  setMsg("Empleado eliminado.", false);
+};
 
-  btnModalEliminar.disabled = true;
-
-  try {
-    let before = null;
-    try {
-      const snap = await db.collection("empleados").doc(deleteId).get();
-      if (snap.exists) before = snap.data() || null;
-    } catch (e) {}
-
-    await db.collection("empleados").doc(deleteId).delete();
-    cerrarModalEliminar();
-
-    if (before) {
-      const nombre = before.nombre || "-";
-      const rol = before.rol || "-";
-      const suc = before.sucursalNombre || getSucursalNombreById(before.sucursalId);
-      await addLog({
-        accion: "eliminar",
-        detalle: `Eliminó empleado: ${nombre} (${rol}) de ${suc || "Sin sucursal"}`
-      });
-    } else {
-      await addLog({
-        accion: "eliminar",
-        detalle: `Eliminó un empleado (ID: ${deleteId}).`
-      });
-    }
-
-    setMsg("Empleado eliminado.", false);
-  } catch (error) {
-    setMsg("No se pudo eliminar. Intenta de nuevo.");
-  } finally {
-    btnModalEliminar.disabled = false;
-  }
-});
+btnBack.onclick = () => location.href = "panel.html";
+document.getElementById("btnLogout").onclick = async () => {
+  await auth.signOut();
+  location.href = "index.html";
+};
