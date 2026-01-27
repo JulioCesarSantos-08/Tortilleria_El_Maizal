@@ -50,10 +50,8 @@
           <label>Rol</label>
           <select id="filtroRolNomina">
             <option value="todos">Todos</option>
-            <option value="Empleado">Empleado</option>
+            <option value="Colaborador">Colaborador</option>
             <option value="Encargado">Encargado</option>
-            <option value="Repartidor">Repartidor</option>
-            <option value="Otro">Otro</option>
           </select>
         </div>
 
@@ -87,6 +85,16 @@
           <span>Pendiente total</span>
           <strong id="resPendienteTotal">$0.00</strong>
         </div>
+
+        <div class="res-card">
+          <span>Total pagado</span>
+          <strong id="resTotalPagado">$0.00</strong>
+        </div>
+
+        <div class="res-card">
+          <span>Total pagado / 7 días</span>
+          <strong id="resPagadoEntre7">$0.00</strong>
+        </div>
       </div>
 
       <div class="table-wrap" style="margin-top:14px;">
@@ -96,17 +104,11 @@
               <th>Colaborador</th>
               <th>Rol</th>
               <th>Sueldo semanal</th>
-              <th>Días</th>
-              <th>Lun</th>
-              <th>Mar</th>
-              <th>Mié</th>
-              <th>Jue</th>
-              <th>Vie</th>
-              <th>Sáb</th>
-              <th>Dom</th>
+              <th>Días trabajados</th>
               <th>Bonos</th>
               <th>Total pagado</th>
               <th>Pendiente</th>
+              <th>Semana pagada</th>
             </tr>
           </thead>
           <tbody id="tbodyNomina"></tbody>
