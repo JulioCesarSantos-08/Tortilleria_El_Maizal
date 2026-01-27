@@ -48,7 +48,10 @@ let semanaActiva = null;
 let semanaActivaKey = null;
 
 function formatMoney(n) {
-  return "$" + Number(n || 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return "$" + Number(n || 0).toLocaleString("es-MX", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
 }
 
 function round2(n) {
@@ -119,13 +122,14 @@ function calcEmpleado(emp) {
   const base = (emp.sueldoSemanal / 7) * emp.diasTrabajados;
   const bruto = round2(base + emp.bonos);
   const anticipo = getAnticipoEmpleadoSemana(emp.empleadoId, semanaActiva.lunesKey);
-  const neto = Math.max(bruto - anticipo, 0);
+  const neto = round2(bruto - anticipo);
 
   return {
     bruto,
     anticipo,
-    totalPagado: emp.semanaPagada ? neto : 0,
-    pendiente: emp.semanaPagada ? 0 : neto
+    neto,
+    totalPagado: emp.semanaPagada ? bruto : 0,
+    pendiente: emp.semanaPagada ? 0 : Math.max(neto, 0)
   };
 }
 
@@ -213,7 +217,7 @@ function renderNomina() {
         <td>${formatMoney(e.sueldoSemanal)}</td>
         <td><input type="number" step="0.1" min="0" max="7" value="${e.diasTrabajados}" data-dias="${idx}"></td>
         <td><input type="number" step="0.01" value="${e.bonos}" data-bono="${idx}"></td>
-        <td>${formatMoney(c.totalPagado)}</td>
+        <td>${formatMoney(c.bruto)}</td>
         <td style="color:${c.pendiente > 0 ? "#b00020" : "#1f8a4c"}">${formatMoney(c.pendiente)}${anticipoTxt}</td>
         <td>
           <button data-pagada="${idx}" style="background:${e.semanaPagada ? "#1f8a4c" : "#b00020"};color:#fff;border:none;padding:6px 10px;border-radius:10px;">
