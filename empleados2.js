@@ -226,7 +226,7 @@ async function cargarEmpleadosPorSucursalId(sucursalId) {
 
   const lista = snap.docs
     .map(d => ({ id: d.id, ...(d.data() || {}) }))
-    .filter(e => String(e.rol || "") === "Empleado" || String(e.rol || "") === "Encargado")
+    .filter(e => String(e.rol || "") === "Encargado" || String(e.rol || "") === "Colaborador")
     .sort((a, b) => String(a.nombre || "").localeCompare(String(b.nombre || "")));
 
   lista.forEach((data) => {
@@ -582,7 +582,7 @@ formVenta.addEventListener("submit", async (e) => {
     const data = snap.data() || {};
     const rol = String(data.rol || "");
 
-    if (rol !== "Empleado" && rol !== "Encargado") {
+    if (rol !== "Encargado" && rol !== "Colaborador") {
       setMsg("Ese usuario no está permitido para este tipo de venta.");
       return;
     }
