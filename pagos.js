@@ -27,6 +27,7 @@ const msg = document.getElementById("msg");
 
 const filtroSucursalNomina = document.getElementById("filtroSucursalNomina");
 const filtroRolNomina = document.getElementById("filtroRolNomina");
+
 const semanaLunesInput = document.getElementById("semanaLunes");
 const btnCrearSemana = document.getElementById("btnCrearSemana");
 const btnSemanaActual = document.getElementById("btnSemanaActual");
@@ -36,6 +37,8 @@ const btnEliminarSemana = document.getElementById("btnEliminarSemana");
 const resNominaTotal = document.getElementById("resNominaTotal");
 const resNominaEntre3 = document.getElementById("resNominaEntre3");
 const resPendienteTotal = document.getElementById("resPendienteTotal");
+const resTotalPagado = document.getElementById("resTotalPagado");
+const resPagadoEntre7 = document.getElementById("resPagadoEntre7");
 
 const tbodyNomina = document.getElementById("tbodyNomina");
 
@@ -44,97 +47,17 @@ const histHasta = document.getElementById("histHasta");
 const btnClearHist = document.getElementById("btnClearHist");
 const wrapSemanas = document.getElementById("wrapSemanas");
 
-let msgTimer = null;
-
-let sucursalesMap = new Map();
 let empleadosCache = [];
 let semanasCache = [];
-
 let semanaActivaKey = null;
 let semanaActiva = null;
 
-const DIAS = ["lun", "mar", "mie", "jue", "vie", "sab", "dom"];
-const DIAS_LABEL = { lun: "Lun", mar: "Mar", mie: "Mié", jue: "Jue", vie: "Vie", sab: "Sáb", dom: "Dom" };
-
-function setMsg(text = "", isError = true, autoClear = true) {
-  msg.style.color = isError ? "#b00020" : "#1f8a4c";
-  msg.textContent = text;
-
-  if (msgTimer) clearTimeout(msgTimer);
-
-  if (autoClear && text) {
-    msgTimer = setTimeout(() => {
-      msg.textContent = "";
-    }, 2500);
-  }
-}
-
 function formatMoney(n) {
-  return "$" + Number(n || 0).toLocaleString("es-MX", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
+  return "$" + Number(n || 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function escapeHtml(text) {
-  return String(text)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function getFechaKeyHoy() {
-  return new Date().toLocaleDateString("sv-SE");
-}
-
-async function addLog({ accion, detalle }) {
-  try {
-    const user = auth.currentUser;
-    await db.collection("logs").add({
-      modulo: "pagos",
-      accion: String(accion || ""),
-      detalle: String(detalle || ""),
-      userEmail: String(user?.email || ""),
-      fechaKey: getFechaKeyHoy(),
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  } catch (e) {}
-}
-
-function fillSucursalSelects() {
-  filtroSucursalNomina.innerHTML = `<option value="todas">Todas</option>`;
-
-  const sucTodas = Array.from(sucursalesMap.entries())
-    .map(([id, data]) => ({ id, ...data }))
-    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
-
-  sucTodas.forEach((s) => {
-    const opt = document.createElement("option");
-    opt.value = s.id;
-    opt.textContent = `${s.nombre || "Sin nombre"}${s.activa ? "" : " (Inactiva)"}`;
-    filtroSucursalNomina.appendChild(opt);
-  });
-}
-
-function escucharSucursales() {
-  db.collection("sucursales")
-    .orderBy("nombre", "asc")
-    .onSnapshot((snapshot) => {
-      sucursalesMap = new Map();
-
-      snapshot.forEach((doc) => {
-        const data = doc.data() || {};
-        sucursalesMap.set(doc.id, {
-          nombre: data.nombre || "Sin nombre",
-          activa: data.activa === true
-        });
-      });
-
-      fillSucursalSelects();
-      renderTodo();
-    });
+function round2(n) {
+  return Number(Number(n || 0).toFixed(2));
 }
 
 function getMondayOfWeek(date) {
@@ -150,662 +73,237 @@ function toFechaKey(date) {
   return new Date(date).toLocaleDateString("sv-SE");
 }
 
-function getSemanaKeyByMondayKey(lunesKey) {
-  return `semana_${String(lunesKey || "")}`;
+function getSemanaKey(lunesKey) {
+  return "semana_" + lunesKey;
 }
 
 function getSemanaLabel(lunesKey) {
-  if (!lunesKey) return "-";
-  const lunes = new Date(lunesKey + "T00:00:00");
-  const domingo = new Date(lunes);
-  domingo.setDate(domingo.getDate() + 6);
-
-  const l = lunes.toLocaleDateString("es-MX");
-  const d = domingo.toLocaleDateString("es-MX");
-  return `${l} - ${d}`;
+  const l = new Date(lunesKey + "T00:00:00");
+  const d = new Date(l);
+  d.setDate(d.getDate() + 6);
+  return l.toLocaleDateString("es-MX") + " - " + d.toLocaleDateString("es-MX");
 }
 
-function round2(n) {
-  return Number(Number(n || 0).toFixed(2));
-}
-
-function getPagoPorDia(sueldoSemanal) {
-  const s = Number(sueldoSemanal || 0);
-  if (s <= 0) return 0;
-  return round2(s / 7);
-}
-
-function autoSetPagosPorDia(empSemana) {
-  const pagoDia = getPagoPorDia(empSemana.sueldoSemanal || 0);
-
-  if (!empSemana.dias) empSemana.dias = {};
-
-  DIAS.forEach((k) => {
-    if (!empSemana.dias[k]) empSemana.dias[k] = { trabajó: true, pago: 0 };
-    if (typeof empSemana.dias[k].trabajó !== "boolean") empSemana.dias[k].trabajó = true;
-
-    if (empSemana.dias[k].trabajó === true) {
-      if (Number(empSemana.dias[k].pago || 0) === 0) {
-        empSemana.dias[k].pago = pagoDia;
-      }
-    } else {
-      empSemana.dias[k].pago = 0;
-    }
-  });
-
-  if (!empSemana.dias.dom) empSemana.dias.dom = { trabajó: false, pago: 0 };
-}
-
-function buildDefaultEmpleadoSemana(emp) {
-  const sueldoSemanal = Number(emp.sueldoSemanal || 0);
-
-  const dias = {};
-  DIAS.forEach((k) => {
-    dias[k] = { trabajó: true, pago: 0 };
-  });
-
-  const pagoDia = getPagoPorDia(sueldoSemanal);
-
-  DIAS.forEach((k) => {
-    if (dias[k].trabajó === true) dias[k].pago = pagoDia;
-  });
-
+function buildEmpleadoSemana(emp) {
   return {
-    empleadoId: String(emp.id),
-    nombre: String(emp.nombre || "Sin nombre"),
-    rol: String(emp.rol || ""),
-    sucursalId: String(emp.sucursalId || ""),
-    sucursalNombre: String(emp.sucursalNombre || ""),
-    sueldoSemanal,
+    empleadoId: emp.id,
+    nombre: emp.nombre || "",
+    rol: emp.rol || "",
+    sucursalId: emp.sucursalId || "",
+    sueldoSemanal: Number(emp.sueldoSemanal || 0),
+    diasTrabajados: 7,
     bonos: 0,
-    dias,
     semanaPagada: false
   };
 }
 
-function getEmpleadosFiltradosParaVista(empleadosSemana) {
-  const suc = filtroSucursalNomina.value;
-  const rol = filtroRolNomina.value;
-
-  let lista = (empleadosSemana || []).map(e => ({ ...e }));
-
-  if (rol !== "todos") {
-    lista = lista.filter(e => String(e.rol || "") === String(rol));
-  }
-
-  if (suc !== "todas") {
-    lista = lista.filter(e => {
-      const r = String(e.rol || "");
-      if (r === "Repartidor") return String(e.sucursalId || "") === String(suc);
-      if (r === "Encargado") return String(e.sucursalId || "") === String(suc);
-      return true;
-    });
-  }
-
-  lista.sort((a, b) => String(a.nombre || "").localeCompare(String(b.nombre || "")));
-  return lista;
+function calcEmpleado(emp) {
+  const base = (emp.sueldoSemanal / 7) * emp.diasTrabajados;
+  const total = round2(base + emp.bonos);
+  return {
+    totalPagado: emp.semanaPagada ? total : 0,
+    pendiente: emp.semanaPagada ? 0 : total,
+    total
+  };
 }
 
-function getDiasTrabajados(empSemana) {
-  let count = 0;
-  DIAS.forEach((k) => {
-    if (empSemana.dias?.[k]?.trabajó === true) count++;
-  });
-  return count;
-}
-
-function calcEmpleadoSemana(empSemana) {
-  const bonos = Number(empSemana.bonos || 0);
-
-  let totalPagado = 0;
-  DIAS.forEach((k) => {
-    const d = empSemana.dias?.[k] || {};
-    const pago = Number(d.pago || 0);
-    totalPagado += pago;
-  });
-
-  const totalEsperado = Number(empSemana.sueldoSemanal || 0) + bonos;
-  const pendiente = Math.max(totalEsperado - totalPagado, 0);
-
-  const diasTrabajados = getDiasTrabajados(empSemana);
-
-  return { totalPagado: round2(totalPagado), totalEsperado: round2(totalEsperado), pendiente: round2(pendiente), diasTrabajados };
-}
-
-async function guardarSemanaActiva() {
-  if (!semanaActivaKey || !semanaActiva) return;
-
-  const ref = db.collection("pagosSemanas").doc(semanaActivaKey);
-
+function calcTotales() {
   let totalNomina = 0;
   let totalPendiente = 0;
+  let totalPagado = 0;
 
-  (semanaActiva.empleados || []).forEach((e) => {
-    const c = calcEmpleadoSemana(e);
-    totalNomina += c.totalEsperado;
+  semanaActiva.empleados.forEach(e => {
+    const c = calcEmpleado(e);
+    totalNomina += c.total;
     totalPendiente += c.pendiente;
+    totalPagado += c.totalPagado;
   });
 
-  semanaActiva.totalNomina = round2(totalNomina);
-  semanaActiva.totalPendiente = round2(totalPendiente);
+  return {
+    totalNomina: round2(totalNomina),
+    totalPendiente: round2(totalPendiente),
+    totalPagado: round2(totalPagado),
+    pagadoEntre7: round2(totalPagado / 7)
+  };
+}
 
-  await ref.update({
-    empleados: semanaActiva.empleados || [],
-    totalNomina: semanaActiva.totalNomina,
-    totalPendiente: semanaActiva.totalPendiente,
+async function guardarSemana() {
+  const t = calcTotales();
+  semanaActiva.totalNomina = t.totalNomina;
+  semanaActiva.totalPendiente = t.totalPendiente;
+
+  await db.collection("pagosSemanas").doc(semanaActivaKey).update({
+    empleados: semanaActiva.empleados,
+    totalNomina: t.totalNomina,
+    totalPendiente: t.totalPendiente,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
 
 async function crearOAbrirSemana(lunesKey) {
-  if (!lunesKey) return;
-
-  const key = getSemanaKeyByMondayKey(lunesKey);
+  const key = getSemanaKey(lunesKey);
   semanaActivaKey = key;
 
   const ref = db.collection("pagosSemanas").doc(key);
   const snap = await ref.get();
 
   if (snap.exists) {
-    semanaActiva = { id: snap.id, ...(snap.data() || {}) };
-
-    let huboCambios = false;
-
-    (semanaActiva.empleados || []).forEach((e) => {
-      if (typeof e.semanaPagada !== "boolean") {
-        e.semanaPagada = false;
-        huboCambios = true;
-      }
-
-      if (!e.dias) {
-        e.dias = {};
-        huboCambios = true;
-      }
-
-      DIAS.forEach((k) => {
-        if (!e.dias[k]) {
-          e.dias[k] = { trabajó: true, pago: 0 };
-          huboCambios = true;
-        }
-        if (typeof e.dias[k].trabajó !== "boolean") {
-          e.dias[k].trabajó = true;
-          huboCambios = true;
-        }
-        if (typeof e.dias[k].pago !== "number") {
-          e.dias[k].pago = Number(e.dias[k].pago || 0);
-          huboCambios = true;
-        }
-      });
-
-      const antes = JSON.stringify(e.dias);
-      autoSetPagosPorDia(e);
-      const despues = JSON.stringify(e.dias);
-      if (antes !== despues) huboCambios = true;
-    });
-
-    if (huboCambios) await guardarSemanaActiva();
+    semanaActiva = snap.data();
     return;
   }
 
-  const empleados = empleadosCache.map(buildDefaultEmpleadoSemana);
+  const empleados = empleadosCache
+    .filter(e => e.rol === "Colaborador" || e.rol === "Encargado")
+    .map(buildEmpleadoSemana);
 
-  const payload = {
-    lunesKey: String(lunesKey),
-    label: String(getSemanaLabel(lunesKey)),
-    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+  semanaActiva = {
+    lunesKey,
+    label: getSemanaLabel(lunesKey),
     empleados,
     totalNomina: 0,
-    totalPendiente: 0
+    totalPendiente: 0,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
   };
 
-  await ref.set(payload);
-
-  await addLog({
-    accion: "crear",
-    detalle: `Creó semana de nómina: ${payload.label}`
-  });
-
-  const nuevoSnap = await ref.get();
-  semanaActiva = { id: nuevoSnap.id, ...(nuevoSnap.data() || {}) };
-}
-
-async function actualizarSueldosDesdeEmpleados() {
-  if (!semanaActiva || !semanaActivaKey) return;
-
-  const map = new Map();
-  empleadosCache.forEach((e) => {
-    map.set(String(e.id), e);
-  });
-
-  let cambios = 0;
-
-  (semanaActiva.empleados || []).forEach((e) => {
-    const real = map.get(String(e.empleadoId));
-    if (!real) return;
-
-    const nuevoSueldo = Number(real.sueldoSemanal || 0);
-
-    if (Number(e.sueldoSemanal || 0) !== nuevoSueldo) {
-      e.sueldoSemanal = nuevoSueldo;
-      cambios++;
-    }
-
-    if (String(e.nombre || "") !== String(real.nombre || "")) e.nombre = String(real.nombre || "");
-    if (String(e.rol || "") !== String(real.rol || "")) e.rol = String(real.rol || "");
-    if (String(e.sucursalId || "") !== String(real.sucursalId || "")) e.sucursalId = String(real.sucursalId || "");
-    if (String(e.sucursalNombre || "") !== String(real.sucursalNombre || "")) e.sucursalNombre = String(real.sucursalNombre || "");
-  });
-
-  (semanaActiva.empleados || []).forEach((e) => {
-    autoSetPagosPorDia(e);
-  });
-
-  await guardarSemanaActiva();
-
-  await addLog({
-    accion: "editar",
-    detalle: `Actualizó sueldos desde empleados en semana: ${semanaActiva.label || semanaActivaKey} | Cambios: ${cambios}`
-  });
-
-  setMsg(`Sueldos actualizados (${cambios} cambios).`, false);
-  renderNomina();
-}
-
-async function eliminarSemanaActiva() {
-  if (!semanaActivaKey || !semanaActiva) return;
-
-  const label = semanaActiva.label || semanaActivaKey;
-  const ok = confirm(`¿Eliminar la semana "${label}"? Esta acción no se puede deshacer.`);
-  if (!ok) return;
-
-  await db.collection("pagosSemanas").doc(semanaActivaKey).delete();
-
-  await addLog({
-    accion: "eliminar",
-    detalle: `Eliminó semana de nómina: ${label}`
-  });
-
-  semanaActivaKey = null;
-  semanaActiva = null;
-
-  setMsg("Semana eliminada.", false);
-  tbodyNomina.innerHTML = `<tr><td colspan="14" style="padding:12px;font-weight:900;color:#555;">Semana eliminada. Crea o abre otra.</td></tr>`;
-  renderResumenSemana();
-}
-
-function renderResumenSemana() {
-  if (!semanaActiva) {
-    resNominaTotal.textContent = formatMoney(0);
-    resNominaEntre3.textContent = formatMoney(0);
-    resPendienteTotal.textContent = formatMoney(0);
-    return;
-  }
-
-  let totalNomina = 0;
-  let totalPendiente = 0;
-
-  (semanaActiva.empleados || []).forEach((e) => {
-    const c = calcEmpleadoSemana(e);
-    totalNomina += c.totalEsperado;
-    totalPendiente += c.pendiente;
-  });
-
-  resNominaTotal.textContent = formatMoney(totalNomina);
-  resNominaEntre3.textContent = formatMoney(totalNomina / 3);
-  resPendienteTotal.textContent = formatMoney(totalPendiente);
+  await ref.set(semanaActiva);
 }
 
 function renderNomina() {
   tbodyNomina.innerHTML = "";
+  if (!semanaActiva) return;
 
-  if (!semanaActiva) {
-    tbodyNomina.innerHTML = `<tr><td colspan="14" style="padding:12px;font-weight:900;color:#555;">Crea o abre una semana para comenzar.</td></tr>`;
-    renderResumenSemana();
-    return;
-  }
-
-  const empleadosVista = getEmpleadosFiltradosParaVista(semanaActiva.empleados || []);
+  const empleadosVista = semanaActiva.empleados.filter(e => {
+    if (filtroRolNomina.value !== "todos" && e.rol !== filtroRolNomina.value) return false;
+    if (filtroSucursalNomina.value !== "todas" && e.sucursalId !== filtroSucursalNomina.value) return false;
+    return true;
+  });
 
   if (!empleadosVista.length) {
-    tbodyNomina.innerHTML = `<tr><td colspan="14" style="padding:12px;font-weight:900;color:#555;">Sin colaboradores para estos filtros.</td></tr>`;
-    renderResumenSemana();
+    tbodyNomina.innerHTML = `<tr><td colspan="9">Sin colaboradores para estos filtros.</td></tr>`;
     return;
   }
 
-  empleadosVista.forEach((e) => {
-    const realIdx = (semanaActiva.empleados || []).findIndex(x => String(x.empleadoId) === String(e.empleadoId));
-    if (realIdx === -1) return;
-
-    const nombre = escapeHtml(e.nombre || "");
-    const rol = escapeHtml(e.rol || "");
-    const sueldo = Number(e.sueldoSemanal || 0);
-
-    const c = calcEmpleadoSemana(e);
-    const diasTxt = `${c.diasTrabajados}/7`;
-
-    let diasHtml = "";
-    DIAS.forEach((k) => {
-      const d = e.dias?.[k] || { trabajó: true, pago: 0 };
-      const isDom = k === "dom";
-
-      const checked = d.trabajó === true ? "checked" : "";
-      const val = Number(d.pago || 0);
-
-      const disablePay = (isDom && e.semanaPagada !== true) ? "disabled" : "";
-
-      diasHtml += `
-        <td>
-          <div style="display:flex;flex-direction:column;gap:6px;min-width:86px;">
-            <label style="display:flex;align-items:center;gap:6px;font-weight:800;font-size:.82rem;color:#333;">
-              <input type="checkbox" data-work="${realIdx}|${k}" ${checked} />
-              ${DIAS_LABEL[k]}
-            </label>
-            <input type="number" min="0" step="0.01" data-pay="${realIdx}|${k}" value="${val ? String(val) : ""}" placeholder="$0" ${disablePay} style="padding:8px;border-radius:10px;border:1px solid #ddd;font-weight:800;" />
-            ${isDom ? `
-              <label style="display:flex;align-items:center;gap:6px;font-weight:1000;font-size:.78rem;color:${e.semanaPagada === true ? "#1f8a4c" : "#b00020"};">
-                <input type="checkbox" data-semana="${realIdx}" ${e.semanaPagada === true ? "checked" : ""} />
-                ${e.semanaPagada === true ? "Semana pagada" : "Pagar semana"}
-              </label>
-            ` : ""}
-          </div>
-        </td>
-      `;
-    });
+  empleadosVista.forEach((e, idx) => {
+    const c = calcEmpleado(e);
 
     tbodyNomina.innerHTML += `
       <tr>
-        <td style="font-weight:900;">${nombre}</td>
-        <td>${rol}</td>
-        <td>${formatMoney(sueldo)}</td>
-        <td style="font-weight:900;">${diasTxt}</td>
-        ${diasHtml}
+        <td><strong>${e.nombre}</strong></td>
+        <td>${e.rol}</td>
+        <td>${formatMoney(e.sueldoSemanal)}</td>
+        <td><input type="number" step="0.1" min="0" max="7" value="${e.diasTrabajados}" data-dias="${idx}"></td>
+        <td><input type="number" step="0.01" value="${e.bonos}" data-bono="${idx}"></td>
+        <td>${formatMoney(c.totalPagado)}</td>
+        <td style="color:${c.pendiente > 0 ? "#b00020" : "#1f8a4c"}">${formatMoney(c.pendiente)}</td>
         <td>
-          <input type="number" min="0" step="0.01" data-bono="${realIdx}" value="${Number(e.bonos || 0) ? String(Number(e.bonos || 0)) : ""}" placeholder="$0" style="padding:8px;border-radius:10px;border:1px solid #ddd;font-weight:800;min-width:90px;" />
+          <button data-pagada="${idx}" style="background:${e.semanaPagada ? "#1f8a4c" : "#b00020"};color:#fff;border:none;padding:6px 10px;border-radius:10px;">
+            ${e.semanaPagada ? "Semana pagada" : "Semana no pagada"}
+          </button>
         </td>
-        <td style="font-weight:900;">${formatMoney(c.totalPagado)}</td>
-        <td style="font-weight:900;color:${c.pendiente > 0 ? "#b00020" : "#1f8a4c"};">${formatMoney(c.pendiente)}</td>
       </tr>
     `;
   });
 
-  document.querySelectorAll("[data-semana]").forEach((el) => {
-    el.addEventListener("change", async () => {
-      const idx = Number(el.getAttribute("data-semana") || "0");
-      const emp = semanaActiva.empleados?.[idx];
-      if (!emp) return;
-
-      const activar = el.checked === true;
-
-      if (typeof emp.semanaPagada !== "boolean") emp.semanaPagada = false;
-      emp.semanaPagada = activar;
-
-      if (!emp.dias) emp.dias = {};
-      if (!emp.dias.dom) emp.dias.dom = { trabajó: true, pago: 0 };
-
-      if (!activar) {
-        emp.dias.dom.trabajó = false;
-        emp.dias.dom.pago = 0;
-      } else {
-        emp.dias.dom.trabajó = true;
-        if (Number(emp.dias.dom.pago || 0) === 0) {
-          emp.dias.dom.pago = getPagoPorDia(emp.sueldoSemanal || 0);
-        }
-      }
-
-      await guardarSemanaActiva();
+  document.querySelectorAll("[data-dias]").forEach(el => {
+    el.oninput = async () => {
+      semanaActiva.empleados[el.dataset.dias].diasTrabajados = Number(el.value || 0);
+      await guardarSemana();
       renderNomina();
-    });
+    };
   });
 
-  document.querySelectorAll("[data-work]").forEach((el) => {
-    el.addEventListener("change", async () => {
-      const raw = el.getAttribute("data-work") || "";
-      const [idxStr, dia] = raw.split("|");
-      const idx = Number(idxStr);
-
-      const emp = semanaActiva.empleados?.[idx];
-      if (!emp) return;
-
-      const trabajó = el.checked === true;
-
-      if (!emp.dias) emp.dias = {};
-      if (!emp.dias[dia]) emp.dias[dia] = { trabajó: true, pago: 0 };
-
-      emp.dias[dia].trabajó = trabajó;
-
-      if (!trabajó) {
-        emp.dias[dia].pago = 0;
-        const inputPago = document.querySelector(`[data-pay="${idx}|${dia}"]`);
-        if (inputPago) inputPago.value = "";
-      } else {
-        if (Number(emp.dias[dia].pago || 0) === 0) {
-          emp.dias[dia].pago = getPagoPorDia(emp.sueldoSemanal || 0);
-        }
-      }
-
-      await guardarSemanaActiva();
+  document.querySelectorAll("[data-bono]").forEach(el => {
+    el.oninput = async () => {
+      semanaActiva.empleados[el.dataset.bono].bonos = Number(el.value || 0);
+      await guardarSemana();
       renderNomina();
-    });
+    };
   });
 
-  document.querySelectorAll("[data-pay]").forEach((el) => {
-    el.addEventListener("input", async () => {
-      const raw = el.getAttribute("data-pay") || "";
-      const [idxStr, dia] = raw.split("|");
-      const idx = Number(idxStr);
-
-      const emp = semanaActiva.empleados?.[idx];
-      if (!emp) return;
-
-      if (dia === "dom") {
-        if (emp.semanaPagada !== true) return;
-      }
-
-      const val = Number(el.value || 0);
-
-      if (!emp.dias) emp.dias = {};
-      if (!emp.dias[dia]) emp.dias[dia] = { trabajó: true, pago: 0 };
-
-      emp.dias[dia].pago = val;
-
-      await guardarSemanaActiva();
+  document.querySelectorAll("[data-pagada]").forEach(btn => {
+    btn.onclick = async () => {
+      const i = btn.dataset.pagada;
+      semanaActiva.empleados[i].semanaPagada = !semanaActiva.empleados[i].semanaPagada;
+      await guardarSemana();
       renderNomina();
-    });
+    };
   });
 
-  document.querySelectorAll("[data-bono]").forEach((el) => {
-    el.addEventListener("input", async () => {
-      const idx = Number(el.getAttribute("data-bono") || "0");
-      const emp = semanaActiva.empleados?.[idx];
-      if (!emp) return;
-
-      emp.bonos = Number(el.value || 0);
-
-      await guardarSemanaActiva();
-      renderNomina();
-    });
-  });
-
-  renderResumenSemana();
-}
-
-function isSemanaEnRango(lunesKey, desde, hasta) {
-  const f = String(lunesKey || "");
-  const d = String(desde || "");
-  const h = String(hasta || "");
-
-  if (d && f < d) return false;
-  if (h && f > h) return false;
-  return true;
+  const t = calcTotales();
+  resNominaTotal.textContent = formatMoney(t.totalNomina);
+  resNominaEntre3.textContent = formatMoney(t.totalNomina / 3);
+  resPendienteTotal.textContent = formatMoney(t.totalPendiente);
+  resTotalPagado.textContent = formatMoney(t.totalPagado);
+  resPagadoEntre7.textContent = formatMoney(t.pagadoEntre7);
 }
 
 function renderHistorial() {
   wrapSemanas.innerHTML = "";
 
-  const desde = histDesde.value;
-  const hasta = histHasta.value;
-
-  let lista = [...semanasCache];
-
-  if (desde || hasta) {
-    lista = lista.filter(s => isSemanaEnRango(s.lunesKey, desde, hasta));
-  }
-
-  if (!lista.length) {
-    wrapSemanas.innerHTML = `<p style="margin-top:10px;font-weight:900;color:#555;">Sin semanas registradas.</p>`;
-    return;
-  }
-
-  lista.sort((a, b) => String(b.lunesKey || "").localeCompare(String(a.lunesKey || "")));
-
-  lista.forEach((s) => {
-    const label = escapeHtml(s.label || getSemanaLabel(s.lunesKey));
-    const total = formatMoney(Number(s.totalNomina || 0));
-    const pendiente = formatMoney(Number(s.totalPendiente || 0));
-
+  semanasCache.forEach(s => {
     wrapSemanas.innerHTML += `
-      <section class="card" style="margin-top:14px;">
-        <h3 style="margin-bottom:10px;">Semana: ${label}</h3>
-        <div class="actions" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
-          <button class="btn-secondary" data-open="${escapeHtml(String(s.lunesKey || ""))}" type="button">Abrir semana</button>
-        </div>
-        <div class="resumen" style="margin-top:10px;">
-          <div class="res-card">
-            <span>Total nómina</span>
-            <strong>${total}</strong>
-          </div>
-          <div class="res-card neto">
-            <span>Pendiente total</span>
-            <strong>${pendiente}</strong>
-          </div>
-        </div>
+      <section class="card">
+        <h3>Semana: ${s.label}</h3>
+        <button data-open="${s.lunesKey}">Abrir semana</button>
       </section>
     `;
   });
 
-  document.querySelectorAll("[data-open]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const lunesKey = btn.getAttribute("data-open");
-      if (!lunesKey) return;
-      semanaLunesInput.value = lunesKey;
-      await crearOAbrirSemana(lunesKey);
-      setMsg(`Semana activa: ${getSemanaLabel(lunesKey)}`, false);
+  document.querySelectorAll("[data-open]").forEach(b => {
+    b.onclick = async () => {
+      semanaLunesInput.value = b.dataset.open;
+      await crearOAbrirSemana(b.dataset.open);
       renderNomina();
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    });
+    };
   });
 }
 
-function renderTodo() {
-  renderNomina();
-  renderHistorial();
-}
+auth.onAuthStateChanged(async user => {
+  if (!user) return location.href = "index.html";
 
-async function abrirSemanaActual() {
-  const hoy = new Date();
-  const lunes = getMondayOfWeek(hoy);
-  const lunesKey = toFechaKey(lunes);
-  semanaLunesInput.value = lunesKey;
-  await crearOAbrirSemana(lunesKey);
-  setMsg(`Semana activa: ${getSemanaLabel(lunesKey)}`, false);
-  renderNomina();
-}
-
-auth.onAuthStateChanged((user) => {
-  if (!user) {
-    window.location.href = "index.html";
-    return;
-  }
-
-  userEmail.textContent = user.email || "Usuario";
+  userEmail.textContent = user.email;
   loading.style.display = "none";
   app.style.display = "block";
 
-  escucharSucursales();
+  db.collection("empleados").onSnapshot(async s => {
+    empleadosCache = s.docs.map(d => ({ id: d.id, ...d.data() }));
+    const lunes = toFechaKey(getMondayOfWeek(new Date()));
+    semanaLunesInput.value = lunes;
+    await crearOAbrirSemana(lunes);
+    renderNomina();
+  });
 
-  db.collection("empleados")
-    .orderBy("nombre", "asc")
-    .onSnapshot((snapshot) => {
-      empleadosCache = snapshot.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
-      if (!semanaActiva) renderNomina();
-    });
-
-  db.collection("pagosSemanas")
-    .orderBy("lunesKey", "desc")
-    .limit(200)
-    .onSnapshot((snapshot) => {
-      semanasCache = snapshot.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
-      renderHistorial();
-    });
-
-  abrirSemanaActual();
+  db.collection("pagosSemanas").orderBy("lunesKey", "desc").onSnapshot(s => {
+    semanasCache = s.docs.map(d => d.data());
+    renderHistorial();
+  });
 });
 
-btnBack.addEventListener("click", () => {
-  window.location.href = "panel.html";
-});
+btnBack.onclick = () => location.href = "panel.html";
+btnGoVentas.onclick = () => location.href = "empleados2.html";
+btnGoGastos.onclick = () => location.href = "gastos.html";
+btnGoEgresos.onclick = () => location.href = "egresos.html";
+btnLogout.onclick = async () => { await auth.signOut(); location.href = "index.html"; };
 
-if (btnGoVentas) btnGoVentas.addEventListener("click", () => {
-  window.location.href = "empleados2.html";
-});
-
-btnGoGastos.addEventListener("click", () => {
-  window.location.href = "gastos.html";
-});
-
-if (btnGoEgresos) btnGoEgresos.addEventListener("click", () => {
-  window.location.href = "egresos.html";
-});
-
-btnLogout.addEventListener("click", async () => {
-  await auth.signOut();
-  window.location.href = "index.html";
-});
-
-btnSemanaActual.addEventListener("click", async () => {
-  setMsg("");
-  await abrirSemanaActual();
-});
-
-btnCrearSemana.addEventListener("click", async () => {
-  setMsg("");
-
-  const lunesKey = semanaLunesInput.value;
-  if (!lunesKey) {
-    setMsg("Selecciona el lunes de la semana.");
-    return;
-  }
-
-  await crearOAbrirSemana(lunesKey);
-  setMsg(`Semana activa: ${getSemanaLabel(lunesKey)}`, false);
+btnSemanaActual.onclick = async () => {
+  const lunes = toFechaKey(getMondayOfWeek(new Date()));
+  semanaLunesInput.value = lunes;
+  await crearOAbrirSemana(lunes);
   renderNomina();
-});
+};
 
-btnSyncSueldos.addEventListener("click", async () => {
-  setMsg("");
-  await actualizarSueldosDesdeEmpleados();
-});
-
-btnEliminarSemana.addEventListener("click", async () => {
-  setMsg("");
-  await eliminarSemanaActiva();
-});
-
-filtroSucursalNomina.addEventListener("change", () => {
-  setMsg("");
+btnCrearSemana.onclick = async () => {
+  if (!semanaLunesInput.value) return;
+  await crearOAbrirSemana(semanaLunesInput.value);
   renderNomina();
-});
+};
 
-filtroRolNomina.addEventListener("change", () => {
-  setMsg("");
-  renderNomina();
-});
+btnEliminarSemana.onclick = async () => {
+  if (!semanaActivaKey) return;
+  await db.collection("pagosSemanas").doc(semanaActivaKey).delete();
+  semanaActiva = null;
+  tbodyNomina.innerHTML = "";
+};
 
-histDesde.addEventListener("change", renderHistorial);
-histHasta.addEventListener("change", renderHistorial);
-
-btnClearHist.addEventListener("click", () => {
-  histDesde.value = "";
-  histHasta.value = "";
-  renderHistorial();
-});
+filtroSucursalNomina.onchange = renderNomina;
+filtroRolNomina.onchange = renderNomina;
