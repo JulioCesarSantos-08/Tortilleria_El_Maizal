@@ -710,15 +710,15 @@ btnEditGuardar.addEventListener("click", async () => {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
 
-    if (categoria === "Trabajadores") {
+        if (categoria === "Trabajadores") {
       updatePayload.colaboradorId = String(colaboradorId);
       updatePayload.colaboradorNombre = String(colaboradorNombre || "");
       updatePayload.esAnticipo = true;
-    } else {
-      updatePayload.colaboradorId = firebase.firestore.FieldValue.delete();
-      updatePayload.colaboradorNombre = firebase.firestore.FieldValue.delete();
-      updatePayload.esAnticipo = firebase.firestore.FieldValue.delete();
-    }
+       } else {
+     updatePayload.colaboradorId = firebase.firestore.FieldValue.delete();
+     updatePayload.colaboradorNombre = firebase.firestore.FieldValue.delete();
+     updatePayload.esAnticipo = false;
+  }
 
     await db.collection("gastos").doc(editId).update(updatePayload);
 
