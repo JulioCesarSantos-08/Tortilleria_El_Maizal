@@ -452,3 +452,23 @@ tbody tr:hover{
   color: var(--maiz-green);
   border: 1px solid rgba(31,138,76,.25);
 }
+#wrapSemanas button[data-open]{
+  border:none;
+  cursor:pointer;
+  padding:10px 14px;
+  border-radius:14px;
+  font-weight:900;
+  font-size:.9rem;
+  background: linear-gradient(90deg, var(--maiz-yellow), var(--maiz-orange));
+  color: var(--black);
+  transition: transform .08s ease, filter .15s ease;
+}
+
+#wrapSemanas button[data-open]:hover{
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+#wrapSemanas button[data-open]:active{
+  transform: translateY(0);
+}
