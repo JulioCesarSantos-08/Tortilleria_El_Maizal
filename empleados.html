@@ -45,14 +45,13 @@
           <label>Rol</label>
           <select id="rol" required>
             <option value="">Selecciona</option>
-            <option value="Empleado">Empleado</option>
+            <option value="Colaborador">Colaborador</option>
             <option value="Repartidor">Repartidor</option>
             <option value="Encargado">Encargado</option>
-            <option value="Otro">Otro</option>
           </select>
         </div>
 
-        <div class="field" id="fieldSucursal">
+        <div class="field">
           <label>Sucursal</label>
           <select id="sucursal" required>
             <option value="">Cargando sucursales...</option>
@@ -97,26 +96,5 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 
   <script src="empleados.js"></script>
-
-  <script>
-    const rolSelect = document.getElementById("rol");
-    const fieldSucursal = document.getElementById("fieldSucursal");
-    const sucursalSelect = document.getElementById("sucursal");
-
-    function actualizarSucursalPorRol() {
-      const rol = rolSelect.value;
-      if (rol === "Empleado") {
-        fieldSucursal.style.display = "none";
-        sucursalSelect.required = false;
-        sucursalSelect.value = "";
-      } else {
-        fieldSucursal.style.display = "";
-        sucursalSelect.required = true;
-      }
-    }
-
-    rolSelect.addEventListener("change", actualizarSucursalPorRol);
-    window.addEventListener("load", actualizarSucursalPorRol);
-  </script>
 </body>
 </html>
