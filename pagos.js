@@ -165,6 +165,37 @@ function getSemanaLabel(lunesKey) {
   return `${l} - ${d}`;
 }
 
+function round2(n) {
+  return Number(Number(n || 0).toFixed(2));
+}
+
+function getPagoPorDia(sueldoSemanal) {
+  const s = Number(sueldoSemanal || 0);
+  if (s <= 0) return 0;
+  return round2(s / 7);
+}
+
+function autoSetPagosPorDia(empSemana) {
+  const pagoDia = getPagoPorDia(empSemana.sueldoSemanal || 0);
+
+  if (!empSemana.dias) empSemana.dias = {};
+
+  DIAS.forEach((k) => {
+    if (!empSemana.dias[k]) empSemana.dias[k] = { trabajó: true, pago: 0 };
+    if (typeof empSemana.dias[k].trabajó !== "boolean") empSemana.dias[k].trabajó = true;
+
+    if (empSemana.dias[k].trabajó === true) {
+      if (Number(empSemana.dias[k].pago || 0) === 0) {
+        empSemana.dias[k].pago = pagoDia;
+      }
+    } else {
+      empSemana.dias[k].pago = 0;
+    }
+  });
+
+  if (!empSemana.dias.dom) empSemana.dias.dom = { trabajó: false, pago: 0 };
+}
+
 function buildDefaultEmpleadoSemana(emp) {
   const sueldoSemanal = Number(emp.sueldoSemanal || 0);
 
@@ -173,7 +204,11 @@ function buildDefaultEmpleadoSemana(emp) {
     dias[k] = { trabajó: true, pago: 0 };
   });
 
-  dias.dom.trabajó = false;
+  const pagoDia = getPagoPorDia(sueldoSemanal);
+
+  DIAS.forEach((k) => {
+    if (dias[k].trabajó === true) dias[k].pago = pagoDia;
+  });
 
   return {
     empleadoId: String(emp.id),
@@ -219,19 +254,8 @@ function getDiasTrabajados(empSemana) {
   return count;
 }
 
-function getTotalAnticiposLunSab(empSemana) {
-  let total = 0;
-  ["lun", "mar", "mie", "jue", "vie", "sab"].forEach((k) => {
-    total += Number(empSemana.dias?.[k]?.pago || 0);
-  });
-  return total;
-}
-
 function calcEmpleadoSemana(empSemana) {
-  const sueldoSemanal = Number(empSemana.sueldoSemanal || 0);
   const bonos = Number(empSemana.bonos || 0);
-
-  const diasTrabajados = getDiasTrabajados(empSemana);
 
   let totalPagado = 0;
   DIAS.forEach((k) => {
@@ -240,10 +264,12 @@ function calcEmpleadoSemana(empSemana) {
     totalPagado += pago;
   });
 
-  const totalEsperado = sueldoSemanal + bonos;
+  const totalEsperado = Number(empSemana.sueldoSemanal || 0) + bonos;
   const pendiente = Math.max(totalEsperado - totalPagado, 0);
 
-  return { totalPagado, totalEsperado, pendiente, diasTrabajados };
+  const diasTrabajados = getDiasTrabajados(empSemana);
+
+  return { totalPagado: round2(totalPagado), totalEsperado: round2(totalEsperado), pendiente: round2(pendiente), diasTrabajados };
 }
 
 async function guardarSemanaActiva() {
@@ -260,8 +286,8 @@ async function guardarSemanaActiva() {
     totalPendiente += c.pendiente;
   });
 
-  semanaActiva.totalNomina = Number(totalNomina.toFixed(2));
-  semanaActiva.totalPendiente = Number(totalPendiente.toFixed(2));
+  semanaActiva.totalNomina = round2(totalNomina);
+  semanaActiva.totalPendiente = round2(totalPendiente);
 
   await ref.update({
     empleados: semanaActiva.empleados || [],
@@ -283,15 +309,41 @@ async function crearOAbrirSemana(lunesKey) {
   if (snap.exists) {
     semanaActiva = { id: snap.id, ...(snap.data() || {}) };
 
-    (semanaActiva.empleados || []).forEach((e) => {
-      if (typeof e.semanaPagada !== "boolean") e.semanaPagada = false;
+    let huboCambios = false;
 
-      if (!e.dias) e.dias = {};
-      if (!e.dias.dom) e.dias.dom = { trabajó: false, pago: 0 };
-      if (typeof e.dias.dom.trabajó !== "boolean") e.dias.dom.trabajó = false;
+    (semanaActiva.empleados || []).forEach((e) => {
+      if (typeof e.semanaPagada !== "boolean") {
+        e.semanaPagada = false;
+        huboCambios = true;
+      }
+
+      if (!e.dias) {
+        e.dias = {};
+        huboCambios = true;
+      }
+
+      DIAS.forEach((k) => {
+        if (!e.dias[k]) {
+          e.dias[k] = { trabajó: true, pago: 0 };
+          huboCambios = true;
+        }
+        if (typeof e.dias[k].trabajó !== "boolean") {
+          e.dias[k].trabajó = true;
+          huboCambios = true;
+        }
+        if (typeof e.dias[k].pago !== "number") {
+          e.dias[k].pago = Number(e.dias[k].pago || 0);
+          huboCambios = true;
+        }
+      });
+
+      const antes = JSON.stringify(e.dias);
+      autoSetPagosPorDia(e);
+      const despues = JSON.stringify(e.dias);
+      if (antes !== despues) huboCambios = true;
     });
 
-    await guardarSemanaActiva();
+    if (huboCambios) await guardarSemanaActiva();
     return;
   }
 
@@ -342,6 +394,10 @@ async function actualizarSueldosDesdeEmpleados() {
     if (String(e.rol || "") !== String(real.rol || "")) e.rol = String(real.rol || "");
     if (String(e.sucursalId || "") !== String(real.sucursalId || "")) e.sucursalId = String(real.sucursalId || "");
     if (String(e.sucursalNombre || "") !== String(real.sucursalNombre || "")) e.sucursalNombre = String(real.sucursalNombre || "");
+  });
+
+  (semanaActiva.empleados || []).forEach((e) => {
+    autoSetPagosPorDia(e);
   });
 
   await guardarSemanaActiva();
@@ -430,20 +486,18 @@ function renderNomina() {
     let diasHtml = "";
     DIAS.forEach((k) => {
       const d = e.dias?.[k] || { trabajó: true, pago: 0 };
-
       const isDom = k === "dom";
 
       const checked = d.trabajó === true ? "checked" : "";
       const val = Number(d.pago || 0);
 
-      const disableWork = "";
       const disablePay = (isDom && e.semanaPagada !== true) ? "disabled" : "";
 
       diasHtml += `
         <td>
           <div style="display:flex;flex-direction:column;gap:6px;min-width:86px;">
             <label style="display:flex;align-items:center;gap:6px;font-weight:800;font-size:.82rem;color:#333;">
-              <input type="checkbox" data-work="${realIdx}|${k}" ${checked} ${disableWork} />
+              <input type="checkbox" data-work="${realIdx}|${k}" ${checked} />
               ${DIAS_LABEL[k]}
             </label>
             <input type="number" min="0" step="0.01" data-pay="${realIdx}|${k}" value="${val ? String(val) : ""}" placeholder="$0" ${disablePay} style="padding:8px;border-radius:10px;border:1px solid #ddd;font-weight:800;" />
@@ -486,20 +540,16 @@ function renderNomina() {
       emp.semanaPagada = activar;
 
       if (!emp.dias) emp.dias = {};
-      if (!emp.dias.dom) emp.dias.dom = { trabajó: false, pago: 0 };
+      if (!emp.dias.dom) emp.dias.dom = { trabajó: true, pago: 0 };
 
       if (!activar) {
         emp.dias.dom.trabajó = false;
         emp.dias.dom.pago = 0;
       } else {
         emp.dias.dom.trabajó = true;
-
-        const anticipos = getTotalAnticiposLunSab(emp);
-        const bonos = Number(emp.bonos || 0);
-        const sueldoSemanal = Number(emp.sueldoSemanal || 0);
-
-        const sugerido = Math.max((sueldoSemanal + bonos) - anticipos, 0);
-        emp.dias.dom.pago = Number(sugerido.toFixed(2));
+        if (Number(emp.dias.dom.pago || 0) === 0) {
+          emp.dias.dom.pago = getPagoPorDia(emp.sueldoSemanal || 0);
+        }
       }
 
       await guardarSemanaActiva();
@@ -527,6 +577,10 @@ function renderNomina() {
         emp.dias[dia].pago = 0;
         const inputPago = document.querySelector(`[data-pay="${idx}|${dia}"]`);
         if (inputPago) inputPago.value = "";
+      } else {
+        if (Number(emp.dias[dia].pago || 0) === 0) {
+          emp.dias[dia].pago = getPagoPorDia(emp.sueldoSemanal || 0);
+        }
       }
 
       await guardarSemanaActiva();
@@ -566,18 +620,6 @@ function renderNomina() {
       if (!emp) return;
 
       emp.bonos = Number(el.value || 0);
-
-      if (emp.semanaPagada === true) {
-        const anticipos = getTotalAnticiposLunSab(emp);
-        const sueldoSemanal = Number(emp.sueldoSemanal || 0);
-        const bonos = Number(emp.bonos || 0);
-        const sugerido = Math.max((sueldoSemanal + bonos) - anticipos, 0);
-
-        if (!emp.dias) emp.dias = {};
-        if (!emp.dias.dom) emp.dias.dom = { trabajó: true, pago: 0 };
-        emp.dias.dom.trabajó = true;
-        emp.dias.dom.pago = Number(sugerido.toFixed(2));
-      }
 
       await guardarSemanaActiva();
       renderNomina();
