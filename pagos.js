@@ -43,6 +43,7 @@ const wrapSemanas = document.getElementById("wrapSemanas");
 let empleadosCache = [];
 let semanasCache = [];
 let anticiposCache = [];
+let sucursalesCache = [];
 
 let semanaActiva = null;
 let semanaActivaKey = null;
@@ -172,23 +173,25 @@ async function crearOAbrirSemana(lunesKey) {
 
   if (snap.exists) {
     semanaActiva = snap.data();
-    return;
+  } else {
+    semanaActiva = {
+      lunesKey,
+      label: getSemanaLabel(lunesKey),
+      empleados: [],
+      totalNomina: 0,
+      totalPendiente: 0,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    await ref.set(semanaActiva);
   }
 
-  const empleados = empleadosCache
-    .filter(e => e.rol === "Colaborador" || e.rol === "Encargado")
-    .map(buildEmpleadoSemana);
+  const idsActuales = new Set(semanaActiva.empleados.map(e => e.empleadoId));
 
-  semanaActiva = {
-    lunesKey,
-    label: getSemanaLabel(lunesKey),
-    empleados,
-    totalNomina: 0,
-    totalPendiente: 0,
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  };
+  empleadosCache
+    .filter(e => (e.rol === "Colaborador" || e.rol === "Encargado") && !idsActuales.has(e.id))
+    .forEach(e => semanaActiva.empleados.push(buildEmpleadoSemana(e)));
 
-  await ref.set(semanaActiva);
+  await guardarSemana();
 }
 
 function renderNomina() {
@@ -267,32 +270,22 @@ function renderNomina() {
   resPagadoEntre7.textContent = formatMoney(t.pagadoEntre7);
 }
 
-function renderHistorial() {
-  wrapSemanas.innerHTML = "";
-  semanasCache.forEach(s => {
-    wrapSemanas.innerHTML += `
-      <section class="card">
-        <h3>Semana: ${s.label}</h3>
-        <button class="btn-secondary" data-open="${s.lunesKey}">Abrir semana</button>
-      </section>
-    `;
-  });
-
-  document.querySelectorAll("[data-open]").forEach(b => {
-    b.onclick = async () => {
-      semanaLunesInput.value = b.dataset.open;
-      await crearOAbrirSemana(b.dataset.open);
-      renderNomina();
-    };
-  });
-}
-
 auth.onAuthStateChanged(async user => {
   if (!user) return location.href = "index.html";
 
   userEmail.textContent = user.email;
   loading.style.display = "none";
   app.style.display = "block";
+
+  db.collection("sucursales").onSnapshot(s => {
+    sucursalesCache = s.docs.map(d => ({ id: d.id, ...d.data() }));
+    filtroSucursalNomina.innerHTML = `<option value="todas">Todas</option>`;
+    sucursalesCache.forEach(s => {
+      if (s.activa) {
+        filtroSucursalNomina.innerHTML += `<option value="${s.id}">${s.nombre}</option>`;
+      }
+    });
+  });
 
   db.collection("empleados").onSnapshot(async s => {
     empleadosCache = s.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -304,7 +297,23 @@ auth.onAuthStateChanged(async user => {
 
   db.collection("pagosSemanas").orderBy("lunesKey", "desc").onSnapshot(s => {
     semanasCache = s.docs.map(d => d.data());
-    renderHistorial();
+    wrapSemanas.innerHTML = "";
+    semanasCache.forEach(s => {
+      wrapSemanas.innerHTML += `
+        <section class="card">
+          <h3>Semana: ${s.label}</h3>
+          <button class="btn-secondary" data-open="${s.lunesKey}">Abrir semana</button>
+        </section>
+      `;
+    });
+
+    document.querySelectorAll("[data-open]").forEach(b => {
+      b.onclick = async () => {
+        semanaLunesInput.value = b.dataset.open;
+        await crearOAbrirSemana(b.dataset.open);
+        renderNomina();
+      };
+    });
   });
 
   db.collection("gastos")
