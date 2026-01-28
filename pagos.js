@@ -229,7 +229,10 @@ function renderNomina() {
   });
 
   document.querySelectorAll("[data-dias]").forEach(el => {
-    el.oninput = async () => {
+    el.oninput = () => {
+      semanaActiva.empleados[el.dataset.dias].diasTrabajados = el.value;
+    };
+    el.onblur = async () => {
       semanaActiva.empleados[el.dataset.dias].diasTrabajados = Number(el.value || 0);
       await guardarSemana();
       renderNomina();
@@ -237,7 +240,10 @@ function renderNomina() {
   });
 
   document.querySelectorAll("[data-bono]").forEach(el => {
-    el.oninput = async () => {
+    el.oninput = () => {
+      semanaActiva.empleados[el.dataset.bono].bonos = el.value;
+    };
+    el.onblur = async () => {
       semanaActiva.empleados[el.dataset.bono].bonos = Number(el.value || 0);
       await guardarSemana();
       renderNomina();
