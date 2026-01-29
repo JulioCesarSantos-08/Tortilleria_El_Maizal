@@ -31,31 +31,31 @@
   <main class="container" id="app" style="display:none;">
     <section class="welcome">
       <h1>Menú principal</h1>
-      <p>Selecciona una opción para administrar empleados, ventas/gastos, ganancias y más.</p>
+      <p>Selecciona una opción para administrar empleados, ventas, gastos y reportes.</p>
     </section>
 
     <section class="grid">
       <div class="card">
         <h2>👨‍🍳 Empleados</h2>
-        <p>Da de alta, edita o elimina empleados y asigna sucursal y rol.</p>
+        <p>Alta, edición y control de empleados por sucursal.</p>
         <button class="btn" id="goEmpleados">Entrar</button>
       </div>
 
       <div class="card">
         <h2>🧾 Administración</h2>
-        <p>Registra ventas y gastos por sucursal y revisa todo en tiempo real.</p>
+        <p>Ventas, gastos, egresos y control diario.</p>
         <button class="btn secondary" id="goAdmin">Entrar</button>
       </div>
 
       <div class="card">
         <h2>📊 Ganancias</h2>
-        <p>Reporte final por fechas: ventas, gastos y ganancia neta.</p>
+        <p>Reporte completo y protegido de ganancias netas.</p>
         <button class="btn" id="goGanancias">Entrar</button>
       </div>
 
       <div class="card">
         <h2>⚙️ Gestión</h2>
-        <p>Otras configuraciones y herramientas del sistema.</p>
+        <p>Configuraciones avanzadas del sistema.</p>
         <button class="btn gray" id="goGestion">Entrar</button>
       </div>
     </section>
@@ -63,6 +63,31 @@
 
   <div class="loading" id="loading">
     Verificando sesión...
+  </div>
+
+  <div class="modal-backdrop" id="modalGanancias" style="display:none;">
+    <div class="modal">
+      <h3>🔒 Acceso a Ganancias</h3>
+      <p>Esta sección está protegida.<br>Ingresa la contraseña para continuar.</p>
+
+      <input
+        type="password"
+        id="inputPasswordGanancias"
+        placeholder="Contraseña"
+        autocomplete="current-password"
+      />
+
+      <p id="msgGanancias"></p>
+
+      <button class="btn-forgot" id="btnForgotGanancias">
+        ¿Olvidaste tu contraseña?
+      </button>
+
+      <div class="modal-actions">
+        <button class="btn gray" id="btnCancelarGanancias">Cancelar</button>
+        <button class="btn" id="btnAccederGanancias">Acceder</button>
+      </div>
+    </div>
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
