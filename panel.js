@@ -1,56 +1,130 @@
+document.addEventListener("DOMContentLoaded", () => {
+
 const firebaseConfig = {
   apiKey: "AIzaSyCzlWi30F2qXaCg9ddjW5RVVsuI23Xl8vY",
   authDomain: "tortilleria-el-maizal.firebaseapp.com",
-  databaseURL: "https://tortilleria-el-maizal-default-rtdb.firebaseio.com",
-  projectId: "tortilleria-el-maizal",
-  storageBucket: "tortilleria-el-maizal.firebasestorage.app",
-  messagingSenderId: "704775522415",
-  appId: "1:704775522415:web:96ae90bb0c0d45cbafa59a"
+  projectId: "tortilleria-el-maizal"
 };
 
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 
 const auth = firebase.auth();
+let db = null;
 
 const loading = document.getElementById("loading");
 const app = document.getElementById("app");
 const userEmail = document.getElementById("userEmail");
 
 const btnLogout = document.getElementById("btnLogout");
-
 const goEmpleados = document.getElementById("goEmpleados");
 const goAdmin = document.getElementById("goAdmin");
 const goGanancias = document.getElementById("goGanancias");
 const goGestion = document.getElementById("goGestion");
 
-auth.onAuthStateChanged((user) => {
+const modal = document.getElementById("modalGanancias");
+const inputPass = document.getElementById("inputPasswordGanancias");
+const msgGanancias = document.getElementById("msgGanancias");
+const btnAcceder = document.getElementById("btnAccederGanancias");
+const btnCancelar = document.getElementById("btnCancelarGanancias");
+const btnForgot = document.getElementById("btnForgotGanancias");
+
+auth.onAuthStateChanged(user => {
   if (!user) {
-    window.location.href = "index.html";
+    location.href = "index.html";
     return;
   }
-
   userEmail.textContent = user.email || "Usuario";
   loading.style.display = "none";
   app.style.display = "block";
 });
 
-btnLogout.addEventListener("click", async () => {
+btnLogout.onclick = async () => {
   await auth.signOut();
-  window.location.href = "index.html";
-});
+  location.href = "index.html";
+};
 
-goEmpleados.addEventListener("click", () => {
-  window.location.href = "empleados.html";
-});
+goEmpleados.onclick = () => location.href = "empleados.html";
+goAdmin.onclick = () => location.href = "empleados2.html";
+goGestion.onclick = () => location.href = "gestion.html";
 
-goAdmin.addEventListener("click", () => {
-  window.location.href = "empleados2.html";
-});
+goGanancias.onclick = () => {
+  msgGanancias.textContent = "";
+  inputPass.value = "";
+  modal.style.display = "flex";
+  inputPass.focus();
+};
 
-goGanancias.addEventListener("click", () => {
-  window.location.href = "ganancias.html";
-});
+btnCancelar.onclick = () => {
+  modal.style.display = "none";
+};
 
-goGestion.addEventListener("click", () => {
-  window.location.href = "gestion.html";
+btnAcceder.onclick = validarAccesoGanancias;
+
+btnForgot.onclick = async () => {
+  try {
+    await auth.sendPasswordResetEmail("roelgopar@gmail.com");
+    msgGanancias.style.color = "#1f8a4c";
+    msgGanancias.textContent = "Se envió un correo para restablecer la contraseña.";
+  } catch {
+    msgGanancias.textContent = "No se pudo enviar el correo.";
+  }
+};
+
+async function validarAccesoGanancias() {
+  const pass = inputPass.value.trim();
+  if (!pass) {
+    msgGanancias.textContent = "Ingresa la contraseña.";
+    return;
+  }
+
+  btnAcceder.disabled = true;
+  msgGanancias.textContent = "Verificando...";
+
+  try {
+    if (!db) db = firebase.firestore();
+
+    const hash = await sha256(pass);
+    const ref = db.collection("configuracionSeguridad").doc("ganancias");
+    const snap = await ref.get();
+
+    if (!snap.exists) {
+      msgGanancias.textContent = "Configuración no encontrada.";
+      btnAcceder.disabled = false;
+      return;
+    }
+
+    const data = snap.data();
+
+    if (data.passwordHash === "PENDIENTE") {
+      await ref.update({
+        passwordHash: hash,
+        estado: "activo",
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      location.href = "ganancias.html";
+      return;
+    }
+
+    if (data.passwordHash !== hash) {
+      msgGanancias.textContent = "Contraseña incorrecta.";
+      btnAcceder.disabled = false;
+      return;
+    }
+
+    location.href = "ganancias.html";
+
+  } catch {
+    msgGanancias.textContent = "Error de validación.";
+    btnAcceder.disabled = false;
+  }
+}
+
+async function sha256(text) {
+  const data = new TextEncoder().encode(text);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 });
