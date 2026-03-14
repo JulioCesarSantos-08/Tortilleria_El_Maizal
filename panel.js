@@ -21,6 +21,7 @@ const goAdmin = document.getElementById("goAdmin");
 const goGanancias = document.getElementById("goGanancias");
 const goGestion = document.getElementById("goGestion");
 
+/* ================= MODAL GANANCIAS ================= */
 const modal = document.getElementById("modalGanancias");
 const inputPass = document.getElementById("inputPasswordGanancias");
 const msgGanancias = document.getElementById("msgGanancias");
@@ -28,25 +29,49 @@ const btnAcceder = document.getElementById("btnAccederGanancias");
 const btnCancelar = document.getElementById("btnCancelarGanancias");
 const btnForgot = document.getElementById("btnForgotGanancias");
 
+/* ================= MODAL PAGO ================= */
+const modalPago = document.getElementById("modalPago");
+const btnAceptarPago = document.getElementById("btnAceptarPago");
+
+/* ================= AUTH ================= */
 auth.onAuthStateChanged(user => {
+
   if (!user) {
     location.href = "index.html";
     return;
   }
+
   userEmail.textContent = user.email || "Usuario";
+
   loading.style.display = "none";
   app.style.display = "block";
+
+  /* ===== MOSTRAR AVISO DE PAGO ===== */
+  if (modalPago) {
+    modalPago.style.display = "flex";
+  }
+
 });
 
+/* ================= CERRAR AVISO DE PAGO ================= */
+if (btnAceptarPago) {
+  btnAceptarPago.onclick = () => {
+    modalPago.style.display = "none";
+  };
+}
+
+/* ================= LOGOUT ================= */
 btnLogout.onclick = async () => {
   await auth.signOut();
   location.href = "index.html";
 };
 
+/* ================= NAVEGACIÓN ================= */
 goEmpleados.onclick = () => location.href = "empleados.html";
 goAdmin.onclick = () => location.href = "empleados2.html";
 goGestion.onclick = () => location.href = "gestion.html";
 
+/* ================= MODAL GANANCIAS ================= */
 goGanancias.onclick = () => {
   msgGanancias.textContent = "";
   inputPass.value = "";
@@ -60,18 +85,31 @@ btnCancelar.onclick = () => {
 
 btnAcceder.onclick = validarAccesoGanancias;
 
+/* ================= RECUPERAR CONTRASEÑA ================= */
 btnForgot.onclick = async () => {
+
   try {
+
     await auth.sendPasswordResetEmail("roelgopar@gmail.com");
+
     msgGanancias.style.color = "#1f8a4c";
-    msgGanancias.textContent = "Se envió un correo para restablecer la contraseña.";
+    msgGanancias.textContent =
+      "Se envió un correo para restablecer la contraseña.";
+
   } catch {
-    msgGanancias.textContent = "No se pudo enviar el correo.";
+
+    msgGanancias.textContent =
+      "No se pudo enviar el correo.";
+
   }
+
 };
 
+/* ================= VALIDAR ACCESO GANANCIAS ================= */
 async function validarAccesoGanancias() {
+
   const pass = inputPass.value.trim();
+
   if (!pass) {
     msgGanancias.textContent = "Ingresa la contraseña.";
     return;
@@ -81,50 +119,82 @@ async function validarAccesoGanancias() {
   msgGanancias.textContent = "Verificando...";
 
   try {
+
     if (!db) db = firebase.firestore();
 
     const hash = await sha256(pass);
-    const ref = db.collection("configuracionSeguridad").doc("ganancias");
+
+    const ref =
+      db.collection("configuracionSeguridad").doc("ganancias");
+
     const snap = await ref.get();
 
     if (!snap.exists) {
-      msgGanancias.textContent = "Configuración no encontrada.";
+
+      msgGanancias.textContent =
+        "Configuración no encontrada.";
+
       btnAcceder.disabled = false;
+
       return;
     }
 
     const data = snap.data();
 
     if (data.passwordHash === "PENDIENTE") {
+
       await ref.update({
+
         passwordHash: hash,
         estado: "activo",
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        updatedAt:
+          firebase.firestore.FieldValue.serverTimestamp()
+
       });
+
       location.href = "ganancias.html";
       return;
+
     }
 
     if (data.passwordHash !== hash) {
-      msgGanancias.textContent = "Contraseña incorrecta.";
+
+      msgGanancias.textContent =
+        "Contraseña incorrecta.";
+
       btnAcceder.disabled = false;
+
       return;
+
     }
 
     location.href = "ganancias.html";
 
   } catch {
-    msgGanancias.textContent = "Error de validación.";
+
+    msgGanancias.textContent =
+      "Error de validación.";
+
     btnAcceder.disabled = false;
+
   }
+
 }
 
+/* ================= HASH ================= */
 async function sha256(text) {
+
   const data = new TextEncoder().encode(text);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+
+  const hashBuffer =
+    await crypto.subtle.digest("SHA-256", data);
+
   return Array.from(new Uint8Array(hashBuffer))
-    .map(b => b.toString(16).padStart(2, "0"))
+    .map(b =>
+      b.toString(16).padStart(2, "0")
+    )
     .join("");
+
 }
 
 });
