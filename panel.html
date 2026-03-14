@@ -65,6 +65,7 @@
     Verificando sesión...
   </div>
 
+  <!-- MODAL GANANCIAS -->
   <div class="modal-backdrop" id="modalGanancias" style="display:none;">
     <div class="modal">
       <h3>🔒 Acceso a Ganancias</h3>
@@ -86,6 +87,29 @@
       <div class="modal-actions">
         <button class="btn gray" id="btnCancelarGanancias">Cancelar</button>
         <button class="btn" id="btnAccederGanancias">Acceder</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL AVISO DE PAGO -->
+  <div class="modal-backdrop" id="modalPago" style="display:none;">
+    <div class="modal">
+      <h3>⚠ Aviso de pago pendiente</h3>
+
+      <p>
+        Estimado cliente, actualmente existe un <b>saldo pendiente correspondiente al primer mes del servicio</b>.
+        <br><br>
+        Recordar que los pagos fueron acordados para el 01 de cada mes.
+        <br><br>
+        Para mantener el sistema funcionando correctamente es necesario regularizar el pago.
+      </p>
+
+      <p style="font-size:.9rem;font-weight:700;color:#b00020">
+        Por favor realiza el pago lo antes posible.
+      </p>
+
+      <div class="modal-actions">
+        <button class="btn" id="btnAceptarPago">Entendido</button>
       </div>
     </div>
   </div>
